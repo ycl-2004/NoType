@@ -11,7 +11,7 @@
     <key>CFBundleIdentifier</key>
     <string>local.yichenlin.noType</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+    <string>AppIcon.icns</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

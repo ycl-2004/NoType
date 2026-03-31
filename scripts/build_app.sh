@@ -47,4 +47,6 @@ if [[ -f "$ICON_SOURCE" ]]; then
   iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
 fi
 
+touch "$APP_DIR"
+
 echo "App ready: $APP_DIR"

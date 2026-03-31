@@ -234,6 +234,34 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func transcriptInsertedModeFallsBackToPasteWhenDirectInsertIsUnsupported() async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(.transcriptInserted)
+        let recorder = StubAudioRecorder()
+        let fallback = StubFallbackInserter()
+        let clipboardStore = StubClipboardStore()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: FailingFocusedTextInserter(),
+            fallbackTextInserter: fallback,
+            clipboardStore: clipboardStore
+        )
+        appState.update(for: .recording)
+        try? await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(appState.dictationState == .idle)
+        #expect(fallback.pastedText == "Hello 你好")
+        #expect(clipboardStore.text == nil)
+        #expect(appState.statusText == "Transcript inserted")
+    }
+
+    @Test
     func selectedMixedRecognitionLanguageIsPassedToTranscriptionEngine() async {
         let appState = makeTestAppState()
         appState.setRecognitionLanguage(.mixed)

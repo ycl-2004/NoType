@@ -151,7 +151,12 @@ final class DictationCoordinator {
             }
 
             AppLogger.log("insert: transcript inserted only")
-            try focusedTextInserter.insert(text)
+            do {
+                try focusedTextInserter.insert(text)
+            } catch {
+                AppLogger.log("insert: direct accessibility insert failed in insert-only mode, falling back to paste")
+                try fallbackTextInserter.paste(text)
+            }
         }
     }
 
