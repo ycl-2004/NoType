@@ -7,6 +7,7 @@ struct TranscriptionEngineTests {
         let result = TranscriptResult(text: "Hello 你好")
 
         #expect(result.text == "Hello 你好")
+        #expect(result.rawText == "Hello 你好")
     }
 
     @Test
@@ -28,6 +29,14 @@ struct TranscriptionEngineTests {
     }
 
     @Test
+    func transcriptResultCanPreserveRawTranscript() {
+        let result = TranscriptResult(text: "开会 tomorrow", rawText: "嗯 开会 tomorrow")
+
+        #expect(result.text == "开会 tomorrow")
+        #expect(result.rawText == "嗯 开会 tomorrow")
+    }
+
+    @Test
     func mixedRecognitionPromptMentionsNoTranslationAndCodeSwitching() {
         let prompt = WhisperKitTranscriptionEngine.mixedPromptText
 
@@ -45,12 +54,12 @@ struct TranscriptionEngineTests {
     }
 
     @Test
-    func fixedLanguageRecognitionUsesSingleAttempt() {
+    func fixedLanguageRecognitionUsesPreferredFallbackAttemptOrder() {
         let chineseAttempts = WhisperKitTranscriptionEngine.transcriptionAttempts(for: .chinese)
         let englishAttempts = WhisperKitTranscriptionEngine.transcriptionAttempts(for: .english)
 
-        #expect(chineseAttempts.map(\.kind) == [.forcedChinese])
-        #expect(englishAttempts.map(\.kind) == [.forcedEnglish])
+        #expect(chineseAttempts.map(\.kind) == [.forcedChinese, .autoDetect, .forcedEnglish])
+        #expect(englishAttempts.map(\.kind) == [.forcedEnglish, .autoDetect, .forcedChinese])
     }
 
     @Test
@@ -62,6 +71,30 @@ struct TranscriptionEngineTests {
         #expect(options.usePrefillPrompt == true)
         #expect(options.detectLanguage == true)
         #expect(options.promptTokens == nil)
+    }
+
+    @Test
+    func fixedLanguagePromptMentionsMixedTermsWithoutTranslation() {
+        let chinesePrompt = WhisperKitTranscriptionEngine.promptText(
+            for: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false)
+        )
+        let englishPrompt = WhisperKitTranscriptionEngine.promptText(
+            for: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false)
+        )
+
+        #expect(chinesePrompt.contains("technical terms"))
+        #expect(chinesePrompt.contains("不要翻译"))
+        #expect(englishPrompt.contains("Chinese words"))
+        #expect(englishPrompt.contains("Do not translate"))
+    }
+
+    @Test
+    func fixedLanguageRecognitionCurrentlyLeavesPromptTokensDisabled() {
+        let chineseOptions = WhisperKitTranscriptionEngine.makeDecodingOptions(for: .chinese)
+        let englishOptions = WhisperKitTranscriptionEngine.makeDecodingOptions(for: .english)
+
+        #expect(chineseOptions.promptTokens == nil)
+        #expect(englishOptions.promptTokens == nil)
     }
 
     @Test
@@ -96,5 +129,69 @@ struct TranscriptionEngineTests {
         )
 
         #expect(selected?.text == "我想 schedule 一个 meeting tomorrow")
+    }
+
+    @Test
+    func chineseTranscriptSelectionKeepsCodeSwitchedChineseLead() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false), text: "我想在 Slack 发一个 message 给 Amy"),
+                .init(attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true), text: "I want to send a message to Amy on Slack"),
+                .init(attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false), text: "send message Slack Amy")
+            ],
+            preferredLanguage: .chinese
+        )
+
+        #expect(selected?.text == "我想在 Slack 发一个 message 给 Amy")
+    }
+
+    @Test
+    func chineseFirstModeRejectsEnglishTranslationWhenChineseCandidateExists() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說"
+                ),
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                    text: "I want to send a message to Amy in Slack I want to share with her together And also with Zhang Yue杰"
+                )
+            ],
+            preferredLanguage: .chinese
+        )
+
+        #expect(selected?.attempt.kind != .forcedEnglish)
+        #expect(selected?.text == "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說")
+    }
+
+    @Test
+    func transcriptPostProcessorRemovesStandaloneFillers() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "嗯 我想在 Slack 发一个 message 给 Amy you know",
+            preferredLanguage: .chinese
+        )
+
+        #expect(cleaned == "我想在 Slack 发一个 message 给 Amy")
+    }
+
+    @Test
+    func transcriptPostProcessorKeepsMeaningfulMixedContent() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "然后 我们明天 sync 一下 roadmap",
+            preferredLanguage: .mixed
+        )
+
+        #expect(cleaned == "我们明天 sync 一下 roadmap")
+    }
+
+    @Test
+    func localWhisperPathValidationRequiresLargeV3Model() {
+        #expect(LocalWhisperPaths.validationError() == nil)
+        #expect(LocalWhisperPaths.modelFolder.contains(LocalWhisperPaths.expectedModelIdentifier))
     }
 }

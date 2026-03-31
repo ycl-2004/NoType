@@ -8,22 +8,22 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
     var menuTitle: String {
         switch self {
         case .mixed:
-            "Auto"
+            "Auto (中英混说)"
         case .english:
-            "English"
+            "英文优先"
         case .chinese:
-            "中文"
+            "中文优先"
         }
     }
 
     var statusDescription: String {
         switch self {
         case .mixed:
-            "Auto"
+            "Auto mixed"
         case .english:
-            "English"
+            "English-first"
         case .chinese:
-            "Chinese"
+            "Chinese-first"
         }
     }
 

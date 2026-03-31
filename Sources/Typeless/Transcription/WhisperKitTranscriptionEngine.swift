@@ -54,11 +54,7 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
 
             let result = results.first?.text ?? ""
             attemptResults.append(AttemptResult(attempt: attempt, text: result))
-
-            if language != .mixed, !Self.shouldRetryAfterTranscriptionResult(result) {
-                AppLogger.log("WhisperKit: transcription succeeded with attempt \(String(describing: attempt.kind))")
-                return TranscriptResult(text: result)
-            }
+            AppLogger.log("WhisperKit: attempt \(String(describing: attempt.kind)) raw result: \(result)")
 
             if Self.shouldRetryAfterTranscriptionResult(result) {
                 AppLogger.log("WhisperKit: empty transcription result, retrying next fallback if available")
@@ -67,8 +63,12 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
 
         if let bestResult = Self.selectBestTranscript(from: attemptResults, preferredLanguage: language),
            !Self.shouldRetryAfterTranscriptionResult(bestResult.text) {
-            AppLogger.log("WhisperKit: selected best transcript from \(attemptResults.count) attempts using \(String(describing: bestResult.attempt.kind))")
-            return TranscriptResult(text: bestResult.text)
+            let cleanedText = TranscriptPostProcessor.clean(bestResult.text, preferredLanguage: language)
+            AppLogger.log(
+                "WhisperKit: selected best transcript from \(attemptResults.count) attempts using \(String(describing: bestResult.attempt.kind)); " +
+                "raw=\"\(bestResult.text)\" cleaned=\"\(cleanedText)\""
+            )
+            return TranscriptResult(text: cleanedText, rawText: bestResult.text)
         }
 
         throw TranscriptionError.failed(
@@ -95,17 +95,25 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
                 TranscriptionAttempt(kind: .forcedEnglish, languageCode: "en", detectLanguage: false)
             ]
         case .chinese:
-            return [TranscriptionAttempt(kind: .forcedChinese, languageCode: "zh", detectLanguage: false)]
+            return [
+                TranscriptionAttempt(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                TranscriptionAttempt(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                TranscriptionAttempt(kind: .forcedEnglish, languageCode: "en", detectLanguage: false)
+            ]
         case .english:
-            return [TranscriptionAttempt(kind: .forcedEnglish, languageCode: "en", detectLanguage: false)]
+            return [
+                TranscriptionAttempt(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                TranscriptionAttempt(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                TranscriptionAttempt(kind: .forcedChinese, languageCode: "zh", detectLanguage: false)
+            ]
         }
     }
 
     nonisolated static func makeDecodingOptions(
         for attempt: TranscriptionAttempt,
-        tokenizer _: WhisperTokenizer? = nil
+        tokenizer: WhisperTokenizer? = nil
     ) -> DecodingOptions {
-        DecodingOptions(
+        return DecodingOptions(
             verbose: true,
             task: .transcribe,
             language: attempt.languageCode,
@@ -113,6 +121,44 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
             detectLanguage: attempt.detectLanguage,
             promptTokens: nil
         )
+    }
+
+    nonisolated static func promptText(for attempt: TranscriptionAttempt) -> String {
+        switch attempt.kind {
+        case .autoDetect:
+            mixedPromptText
+        case .forcedChinese:
+            """
+            This is primarily Chinese dictation.
+            English words, names, and technical terms may appear.
+            Do not translate.
+            Preserve any English words exactly as spoken.
+            这是以中文为主的语音转写。
+            其中可能夹杂英文单词、人名或技术词。
+            不要翻译，按原话输出。
+            """
+        case .forcedEnglish:
+            """
+            This is primarily English dictation.
+            Chinese words, names, and short phrases may appear.
+            Do not translate.
+            Preserve any Chinese words exactly as spoken.
+            This may contain code-switching.
+            """
+        }
+    }
+
+    nonisolated static func encodedPromptTokens(
+        for attempt: TranscriptionAttempt,
+        tokenizer: WhisperTokenizer?
+    ) -> [Int]? {
+        guard let tokenizer else {
+            return nil
+        }
+
+        return tokenizer
+            .encode(text: " " + promptText(for: attempt).trimmingCharacters(in: .whitespacesAndNewlines))
+            .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
     }
 
     nonisolated static func shouldRetryAfterTranscriptionResult(_ text: String) -> Bool {
@@ -141,17 +187,79 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         let hasLatin = scalarView.contains { CharacterSet.letters.contains($0) && $0.value < 128 }
         let hasCJK = scalarView.contains { (0x4E00...0x9FFF).contains($0.value) }
         let contentLength = trimmed.count
+        let latinCount = scalarView.filter { CharacterSet.letters.contains($0) && $0.value < 128 }.count
+        let cjkCount = scalarView.filter { (0x4E00...0x9FFF).contains($0.value) }.count
+        let repetitionPenalty = repeatedFragmentPenalty(in: trimmed)
+        let mixedBonus = hasLatin && hasCJK ? 220 : 0
+        let englishSentencePenalty = englishDominantPenalty(in: trimmed, latinCount: latinCount, cjkCount: cjkCount)
+        let chineseSentencePenalty = chineseDominantPenalty(in: trimmed, latinCount: latinCount, cjkCount: cjkCount)
 
         switch language {
         case .mixed:
-            let mixedBonus = hasLatin && hasCJK ? 500 : 0
-            let multilingualBonus = hasLatin || hasCJK ? 100 : 0
-            return mixedBonus + multilingualBonus + contentLength
+            let multilingualBonus = hasLatin || hasCJK ? 100 : -200
+            return mixedBonus + multilingualBonus + contentLength + min(latinCount, 40) + min(cjkCount * 2, 80) - repetitionPenalty
         case .chinese:
-            return (hasCJK ? 200 : 0) + contentLength
+            let cjkBonus = hasCJK ? 260 : -260
+            let mixedLanguageSupport = hasLatin && hasCJK ? 120 : 0
+            return cjkBonus + mixedLanguageSupport + (cjkCount * 4) + latinCount + contentLength - repetitionPenalty - englishSentencePenalty
         case .english:
-            return (hasLatin ? 200 : 0) + contentLength
+            let latinBonus = hasLatin ? 260 : -260
+            let mixedLanguageSupport = hasLatin && hasCJK ? 120 : 0
+            return latinBonus + mixedLanguageSupport + (latinCount * 4) + cjkCount + contentLength - repetitionPenalty - chineseSentencePenalty
         }
+    }
+
+    nonisolated static func repeatedFragmentPenalty(in text: String) -> Int {
+        let tokens = text
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .map { $0.lowercased() }
+
+        guard tokens.count > 1 else {
+            return 0
+        }
+
+        var penalty = 0
+        for index in 1..<tokens.count where tokens[index] == tokens[index - 1] {
+            penalty += 40
+        }
+        return penalty
+    }
+
+    nonisolated static func englishDominantPenalty(in text: String, latinCount: Int, cjkCount: Int) -> Int {
+        guard latinCount > 0 else {
+            return 0
+        }
+
+        var penalty = 0
+        if cjkCount <= 2, latinCount >= 18 {
+            penalty += 420
+        }
+        if latinCount > max(cjkCount * 3, 12) {
+            penalty += 220
+        }
+        if text.contains("I want to ") || text.contains("Let's ") || text.contains("Now ") {
+            penalty += 120
+        }
+        return penalty
+    }
+
+    nonisolated static func chineseDominantPenalty(in text: String, latinCount: Int, cjkCount: Int) -> Int {
+        guard cjkCount > 0 else {
+            return 0
+        }
+
+        var penalty = 0
+        if latinCount <= 2, cjkCount >= 12 {
+            penalty += 420
+        }
+        if cjkCount > max(latinCount * 3, 12) {
+            penalty += 220
+        }
+        if text.contains("我想") || text.contains("現在") || text.contains("可以嗎") {
+            penalty += 80
+        }
+        return penalty
     }
 
     private func loadPipeline() async throws -> WhisperKit {
@@ -159,26 +267,22 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
             return whisperKit
         }
 
-        let config: WhisperKitConfig
-        if LocalWhisperPaths.modelFolderExists {
-            AppLogger.log("WhisperKit: loading local model from \(LocalWhisperPaths.modelFolder)")
-            config = WhisperKitConfig(
-                modelFolder: LocalWhisperPaths.modelFolder,
-                tokenizerFolder: LocalWhisperPaths.tokenizerBaseFolder,
-                verbose: true,
-                logLevel: .debug,
-                load: true,
-                download: false
-            )
-        } else {
-            AppLogger.log("WhisperKit: local model missing, falling back to auto-download")
-            config = WhisperKitConfig(
-                verbose: true,
-                logLevel: .debug,
-                load: true,
-                download: true
-            )
+        if let validationError = LocalWhisperPaths.validationError() {
+            AppLogger.log("WhisperKit: model validation failed: \(validationError)")
+            throw TranscriptionError.modelUnavailable(validationError)
         }
+
+        AppLogger.log(
+            "WhisperKit: loading validated local model \(LocalWhisperPaths.expectedModelIdentifier) from \(LocalWhisperPaths.modelFolder)"
+        )
+        let config = WhisperKitConfig(
+            modelFolder: LocalWhisperPaths.modelFolder,
+            tokenizerFolder: LocalWhisperPaths.tokenizerBaseFolder,
+            verbose: true,
+            logLevel: .debug,
+            load: true,
+            download: false
+        )
 
         let pipeline = try await WhisperKit(config)
         whisperKit = pipeline

@@ -24,7 +24,7 @@ struct AppStateTests {
         let appState = AppState(userDefaults: defaults)
 
         #expect(appState.selectedRecognitionLanguage == DictationRecognitionLanguage.mixed)
-        #expect(appState.selectedRecognitionLanguage.menuTitle == "Auto")
+        #expect(appState.selectedRecognitionLanguage.menuTitle == "Auto (中英混说)")
     }
 
     @Test
