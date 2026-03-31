@@ -6,7 +6,7 @@ import Testing
 struct DictationCoordinatorTests {
     @Test
     func toggleFromIdleStartsRecording() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let coordinator = DictationCoordinator(
             appState: appState,
             microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
@@ -24,7 +24,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func toggleFromRecordingReturnsToIdle() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let recorder = StubAudioRecorder()
         let coordinator = DictationCoordinator(
             appState: appState,
@@ -45,7 +45,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func missingAccessibilityPermissionDoesNotBlockRecordingStart() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let coordinator = DictationCoordinator(
             appState: appState,
             microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
@@ -63,7 +63,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func missingAccessibilityPermissionPromptsAndStopsInsertion() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let recorder = StubAudioRecorder()
         let accessibilityManager = StubAccessibilityPermissionManager(trusted: false)
         let coordinator = DictationCoordinator(
@@ -86,7 +86,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func insertionFailureUsesFallback() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let recorder = StubAudioRecorder()
         let fallback = StubFallbackInserter()
         let clipboardStore = StubClipboardStore()
@@ -112,7 +112,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func selectedRecognitionLanguageIsPassedToTranscriptionEngine() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.setRecognitionLanguage(.chinese)
         let recorder = StubAudioRecorder()
         let transcriptionEngine = RecordingStubTranscriptionEngine(result: .init(text: "你好"))
@@ -135,7 +135,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func successfulInsertionStillUpdatesClipboard() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let recorder = StubAudioRecorder()
         let clipboardStore = StubClipboardStore()
         let coordinator = DictationCoordinator(
@@ -159,7 +159,7 @@ struct DictationCoordinatorTests {
 
     @Test
     func successfulDictationUsesSelectedSuccessStatusMode() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.setSuccessStatusMode(.transcriptCopied)
         let recorder = StubAudioRecorder()
         let coordinator = DictationCoordinator(
@@ -180,8 +180,62 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func transcriptCopiedModeDoesNotInsertText() async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(.transcriptCopied)
+        let recorder = StubAudioRecorder()
+        let focusedTextInserter = RecordingFocusedTextInserter()
+        let clipboardStore = StubClipboardStore()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: focusedTextInserter,
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboardStore
+        )
+        appState.update(for: .recording)
+        try? await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(clipboardStore.text == "Hello 你好")
+        #expect(focusedTextInserter.insertedText == nil)
+    }
+
+    @Test
+    func transcriptInsertedModeDoesNotSyncClipboardOrPasteFallback() async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(.transcriptInserted)
+        let recorder = StubAudioRecorder()
+        let focusedTextInserter = RecordingFocusedTextInserter()
+        let fallback = StubFallbackInserter()
+        let clipboardStore = StubClipboardStore()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: focusedTextInserter,
+            fallbackTextInserter: fallback,
+            clipboardStore: clipboardStore
+        )
+        appState.update(for: .recording)
+        try? await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(focusedTextInserter.insertedText == "Hello 你好")
+        #expect(clipboardStore.text == nil)
+        #expect(fallback.pastedText == nil)
+    }
+
+    @Test
     func selectedMixedRecognitionLanguageIsPassedToTranscriptionEngine() async {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.setRecognitionLanguage(.mixed)
         let recorder = StubAudioRecorder()
         let transcriptionEngine = RecordingStubTranscriptionEngine(result: .init(text: "I like 西瓜"))
@@ -224,7 +278,7 @@ private final class StubAudioRecorder: AudioRecording, @unchecked Sendable {
 private struct StubMicrophonePermissionManager: MicrophonePermissionManaging {
     let state: PermissionState
 
-    func currentState() async -> PermissionState { state }
+    func currentState() -> PermissionState { state }
     func requestIfNeeded() async -> PermissionState { state }
 }
 
@@ -271,6 +325,15 @@ private struct StubFocusedTextInserter: FocusedTextInserter {
 }
 
 @MainActor
+private final class RecordingFocusedTextInserter: FocusedTextInserter {
+    private(set) var insertedText: String?
+
+    func insert(_ text: String) throws {
+        insertedText = text
+    }
+}
+
+@MainActor
 private final class StubFallbackInserter: FallbackTextInserter {
     private(set) var pastedText: String?
 
@@ -292,4 +355,12 @@ private struct FailingFocusedTextInserter: FocusedTextInserter {
     func insert(_ text: String) throws {
         throw InsertionError.unsupportedFocusedElement
     }
+}
+
+@MainActor
+private func makeTestAppState() -> AppState {
+    let suiteName = "DictationCoordinatorTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    return AppState(userDefaults: defaults)
 }

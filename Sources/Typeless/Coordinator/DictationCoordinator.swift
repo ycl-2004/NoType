@@ -122,20 +122,36 @@ final class DictationCoordinator {
     }
 
     private func insert(_ text: String) throws {
-        reactivateTargetApplicationIfNeeded()
-        try clipboardStore.setText(text)
-        AppLogger.log("insert: latest transcript synced to clipboard")
+        switch appState.selectedSuccessStatusMode {
+        case .both:
+            reactivateTargetApplicationIfNeeded()
+            try clipboardStore.setText(text)
+            AppLogger.log("insert: latest transcript synced to clipboard")
 
-        guard accessibilityPermissionManager.isTrusted() else {
-            accessibilityPermissionManager.promptIfNeeded()
-            throw InsertionError.notTrusted
-        }
+            guard accessibilityPermissionManager.isTrusted() else {
+                accessibilityPermissionManager.promptIfNeeded()
+                throw InsertionError.notTrusted
+            }
 
-        do {
+            do {
+                try focusedTextInserter.insert(text)
+            } catch {
+                AppLogger.log("insert: direct accessibility insert failed, falling back to paste")
+                try fallbackTextInserter.paste(text)
+            }
+        case .transcriptCopied:
+            try clipboardStore.setText(text)
+            AppLogger.log("insert: transcript copied only")
+        case .transcriptInserted:
+            reactivateTargetApplicationIfNeeded()
+
+            guard accessibilityPermissionManager.isTrusted() else {
+                accessibilityPermissionManager.promptIfNeeded()
+                throw InsertionError.notTrusted
+            }
+
+            AppLogger.log("insert: transcript inserted only")
             try focusedTextInserter.insert(text)
-        } catch {
-            AppLogger.log("insert: direct accessibility insert failed, falling back to paste")
-            try fallbackTextInserter.paste(text)
         }
     }
 

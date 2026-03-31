@@ -4,11 +4,23 @@ import AppKit
 final class MenuBarController: NSObject {
     private let appState: AppState
     private let coordinator: DictationCoordinator
+    private let microphonePermissionManager: MicrophonePermissionManaging
+    private let accessibilityPermissionManager: AccessibilityPermissionManaging
+    private let permissionSettingsOpener: PermissionSettingsOpening
     private let statusItem: NSStatusItem
 
-    init(appState: AppState, coordinator: DictationCoordinator) {
+    init(
+        appState: AppState,
+        coordinator: DictationCoordinator,
+        microphonePermissionManager: MicrophonePermissionManaging = MicrophonePermissionManager(),
+        accessibilityPermissionManager: AccessibilityPermissionManaging = AccessibilityPermissionManager(),
+        permissionSettingsOpener: PermissionSettingsOpening = SystemSettingsOpener()
+    ) {
         self.appState = appState
         self.coordinator = coordinator
+        self.microphonePermissionManager = microphonePermissionManager
+        self.accessibilityPermissionManager = accessibilityPermissionManager
+        self.permissionSettingsOpener = permissionSettingsOpener
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         appState.onChange = { [weak self] in
@@ -48,6 +60,10 @@ final class MenuBarController: NSObject {
         let successStatusMenuItem = NSMenuItem(title: "Success Status: \(appState.selectedSuccessStatusMode.menuTitle)", action: nil, keyEquivalent: "")
         successStatusMenuItem.submenu = successStatusModeMenu()
         menu.addItem(successStatusMenuItem)
+
+        let permissionsMenuItem = NSMenuItem(title: "Permissions", action: nil, keyEquivalent: "")
+        permissionsMenuItem.submenu = permissionsMenu()
+        menu.addItem(permissionsMenuItem)
 
         let shortcutItem = NSMenuItem(title: "Shortcut: Command + Shift + H", action: nil, keyEquivalent: "")
         menu.addItem(shortcutItem)
@@ -144,6 +160,38 @@ final class MenuBarController: NSObject {
         return menu
     }
 
+    private func permissionsMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let accessibilityTrusted = accessibilityPermissionManager.isTrusted()
+        let microphoneState = microphonePermissionManager.currentState()
+
+        let accessibilityStatus = accessibilityTrusted ? "Granted" : "Required"
+        let microphoneStatus = microphoneState == .authorized ? "Granted" : "Required"
+
+        menu.addItem(NSMenuItem(title: "Accessibility: \(accessibilityStatus)", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Microphone: \(microphoneStatus)", action: nil, keyEquivalent: ""))
+        menu.addItem(.separator())
+
+        let accessibilityItem = NSMenuItem(
+            title: "Open Accessibility Settings",
+            action: #selector(handleOpenAccessibilitySettings),
+            keyEquivalent: ""
+        )
+        accessibilityItem.target = self
+        menu.addItem(accessibilityItem)
+
+        let microphoneItem = NSMenuItem(
+            title: "Open Microphone Settings",
+            action: #selector(handleOpenMicrophoneSettings),
+            keyEquivalent: ""
+        )
+        microphoneItem.target = self
+        menu.addItem(microphoneItem)
+
+        return menu
+    }
+
     @objc
     private func handleToggle() {
         Task { [coordinator] in
@@ -171,6 +219,18 @@ final class MenuBarController: NSObject {
 
         appState.setSuccessStatusMode(mode)
         appState.setDebugMessage("Success status set to \(mode.menuTitle)")
+    }
+
+    @objc
+    private func handleOpenAccessibilitySettings() {
+        permissionSettingsOpener.openSettings(for: .accessibility)
+        appState.setDebugMessage("Opened Accessibility settings")
+    }
+
+    @objc
+    private func handleOpenMicrophoneSettings() {
+        permissionSettingsOpener.openSettings(for: .microphone)
+        appState.setDebugMessage("Opened Microphone settings")
     }
 
     @objc

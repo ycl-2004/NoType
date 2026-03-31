@@ -2,13 +2,13 @@ import AVFoundation
 
 @MainActor
 protocol MicrophonePermissionManaging {
-    func currentState() async -> PermissionState
+    func currentState() -> PermissionState
     func requestIfNeeded() async -> PermissionState
 }
 
 @MainActor
 struct MicrophonePermissionManager: MicrophonePermissionManaging {
-    func currentState() async -> PermissionState {
+    func currentState() -> PermissionState {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             .authorized
@@ -22,7 +22,7 @@ struct MicrophonePermissionManager: MicrophonePermissionManaging {
     }
 
     func requestIfNeeded() async -> PermissionState {
-        let state = await currentState()
+        let state = currentState()
         guard state == .notDetermined else { return state }
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         return granted ? .authorized : .denied

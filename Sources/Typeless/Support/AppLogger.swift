@@ -24,3 +24,4 @@ enum AppLogger {
         try? data.write(to: logURL, options: .atomic)
     }
 }
+
