@@ -3,6 +3,29 @@ import Foundation
 
 @MainActor
 final class DictationCoordinator {
+    private enum InsertOutcome {
+        case usedSelectedMode
+        case copiedBecauseTargetChanged
+
+        var statusText: String {
+            switch self {
+            case .usedSelectedMode:
+                ""
+            case .copiedBecauseTargetChanged:
+                "Original chat changed, transcript copied"
+            }
+        }
+
+        var debugMessage: String {
+            switch self {
+            case .usedSelectedMode:
+                "Transcript ready"
+            case .copiedBecauseTargetChanged:
+                "Original input changed during dictation; transcript copied to clipboard"
+            }
+        }
+    }
+
     private let appState: AppState
     private let microphonePermissionManager: MicrophonePermissionManaging
     private let accessibilityPermissionManager: AccessibilityPermissionManaging
@@ -12,6 +35,7 @@ final class DictationCoordinator {
     private let fallbackTextInserter: FallbackTextInserter
     private let clipboardStore: ClipboardStoring
     private var targetApplication: NSRunningApplication?
+    private var targetInput: FocusedInputTarget?
 
     init(
         appState: AppState,
@@ -47,9 +71,14 @@ final class DictationCoordinator {
 
     private func startDictation() async {
         targetApplication = captureTargetApplication()
+        targetInput = focusedTextInserter.captureTarget()
         appState.lastError = nil
         appState.setDebugMessage("Requesting microphone permission")
-        AppLogger.log("startDictation: requesting microphone permission, targetApp=\(targetApplication?.bundleIdentifier ?? "unknown")")
+        AppLogger.log(
+            "startDictation: requesting microphone permission, " +
+            "targetApp=\(targetApplication?.bundleIdentifier ?? "unknown"), " +
+            "targetInput=\(targetInput?.debugDescription ?? "none")"
+        )
 
         let microphoneState = await microphonePermissionManager.requestIfNeeded()
         AppLogger.log("startDictation: microphone permission=\(String(describing: microphoneState))")
@@ -90,10 +119,12 @@ final class DictationCoordinator {
             appState.setTranscriptPreview(transcript.text)
             appState.update(for: .inserting)
             AppLogger.log("stopDictation: transcript length=\(transcript.text.count)")
-            try insert(transcript.text)
+            let insertOutcome = try insert(transcript.text)
             appState.update(for: .idle)
-            appState.statusText = appState.selectedSuccessStatusMode.statusText
-            appState.setDebugMessage("Transcript ready")
+            appState.statusText = insertOutcome == .usedSelectedMode
+                ? appState.selectedSuccessStatusMode.statusText
+                : insertOutcome.statusText
+            appState.setDebugMessage(insertOutcome.debugMessage)
             AppLogger.log("stopDictation: transcript copied or inserted")
         } catch let error as DictationError {
             appState.setError(error)
@@ -121,7 +152,7 @@ final class DictationCoordinator {
         }
     }
 
-    private func insert(_ text: String) throws {
+    private func insert(_ text: String) throws -> InsertOutcome {
         switch appState.selectedSuccessStatusMode {
         case .both:
             reactivateTargetApplicationIfNeeded()
@@ -134,14 +165,20 @@ final class DictationCoordinator {
             }
 
             do {
-                try focusedTextInserter.insert(text)
+                try insertIntoCapturedTargetOrCurrent(text)
+                return .usedSelectedMode
+            } catch InsertionError.capturedTargetUnavailable {
+                AppLogger.log("insert: original input changed, keeping transcript in clipboard instead of inserting elsewhere")
+                return .copiedBecauseTargetChanged
             } catch {
                 AppLogger.log("insert: direct accessibility insert failed, falling back to paste")
                 try fallbackTextInserter.paste(text, preserveClipboard: false)
+                return .usedSelectedMode
             }
         case .transcriptCopied:
             try clipboardStore.setText(text)
             AppLogger.log("insert: transcript copied only")
+            return .usedSelectedMode
         case .transcriptInserted:
             reactivateTargetApplicationIfNeeded()
 
@@ -152,12 +189,33 @@ final class DictationCoordinator {
 
             AppLogger.log("insert: transcript inserted only")
             do {
-                try focusedTextInserter.insert(text)
+                try insertIntoCapturedTargetOrCurrent(text)
+                return .usedSelectedMode
+            } catch InsertionError.capturedTargetUnavailable {
+                AppLogger.log("insert: original input changed in insert-only mode, copying transcript instead of inserting into a different field")
+                try clipboardStore.setText(text)
+                return .copiedBecauseTargetChanged
             } catch {
                 AppLogger.log("insert: direct accessibility insert failed in insert-only mode, falling back to paste")
                 try fallbackTextInserter.paste(text, preserveClipboard: true)
+                return .usedSelectedMode
             }
         }
+    }
+
+    private func insertIntoCapturedTargetOrCurrent(_ text: String) throws {
+        if let targetInput {
+            do {
+                AppLogger.log("insert: trying captured input target \(targetInput.debugDescription)")
+                try focusedTextInserter.insert(text, into: targetInput)
+                return
+            } catch {
+                AppLogger.log("insert: captured input target failed, refusing to redirect into a different focused field")
+                throw InsertionError.capturedTargetUnavailable
+            }
+        }
+
+        try focusedTextInserter.insert(text)
     }
 
     private func captureTargetApplication() -> NSRunningApplication? {

@@ -158,6 +158,92 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func insertionUsesCapturedInputTargetWhenAvailable() async {
+        let appState = makeTestAppState()
+        let recorder = StubAudioRecorder()
+        let focusedTextInserter = RecordingFocusedTextInserter(capturedTarget: FocusedInputTarget(element: nil, debugDescription: "chat-input"))
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: focusedTextInserter,
+            fallbackTextInserter: StubFallbackInserter()
+        )
+
+        await coordinator.toggleDictation()
+        try? await recorder.startRecording()
+        appState.update(for: .recording)
+
+        await coordinator.toggleDictation()
+
+        #expect(focusedTextInserter.insertedIntoCapturedTargetText == "Hello 你好")
+        #expect(focusedTextInserter.insertedText == nil)
+    }
+
+    @Test
+    func insertionFallsBackToCurrentFocusWhenCapturedTargetInsertFails() async {
+        let appState = makeTestAppState()
+        let recorder = StubAudioRecorder()
+        let focusedTextInserter = RecordingFocusedTextInserter(
+            capturedTarget: FocusedInputTarget(element: nil, debugDescription: "chat-input"),
+            failCapturedInsert: true
+        )
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: focusedTextInserter,
+            fallbackTextInserter: StubFallbackInserter()
+        )
+
+        await coordinator.toggleDictation()
+        try? await recorder.startRecording()
+        appState.update(for: .recording)
+
+        await coordinator.toggleDictation()
+
+        #expect(focusedTextInserter.insertedIntoCapturedTargetText == nil)
+        #expect(focusedTextInserter.insertedText == nil)
+        #expect(appState.statusText == "Original chat changed, transcript copied")
+    }
+
+    @Test
+    func insertOnlyModeCopiesTranscriptWhenCapturedTargetChanges() async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(.transcriptInserted)
+        let recorder = StubAudioRecorder()
+        let clipboardStore = StubClipboardStore()
+        let focusedTextInserter = RecordingFocusedTextInserter(
+            capturedTarget: FocusedInputTarget(element: nil, debugDescription: "chat-input"),
+            failCapturedInsert: true
+        )
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: focusedTextInserter,
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboardStore
+        )
+
+        await coordinator.toggleDictation()
+        try? await recorder.startRecording()
+        appState.update(for: .recording)
+
+        await coordinator.toggleDictation()
+
+        #expect(clipboardStore.text == "Hello 你好")
+        #expect(appState.statusText == "Original chat changed, transcript copied")
+        #expect(appState.lastDebugMessage == "Original input changed during dictation; transcript copied to clipboard")
+    }
+
+    @Test
     func successfulDictationUsesSelectedSuccessStatusMode() async {
         let appState = makeTestAppState()
         appState.setSuccessStatusMode(.transcriptCopied)
@@ -377,15 +463,40 @@ private final class RecordingStubTranscriptionEngine: TranscriptionEngine {
 }
 
 private struct StubFocusedTextInserter: FocusedTextInserter {
+    func captureTarget() -> FocusedInputTarget? { nil }
     func insert(_ text: String) throws {}
+    func insert(_ text: String, into target: FocusedInputTarget) throws {}
 }
 
 @MainActor
 private final class RecordingFocusedTextInserter: FocusedTextInserter {
     private(set) var insertedText: String?
+    private(set) var insertedIntoCapturedTargetText: String?
+    private let capturedTarget: FocusedInputTarget?
+    private let failCapturedInsert: Bool
+
+    init(
+        capturedTarget: FocusedInputTarget? = nil,
+        failCapturedInsert: Bool = false
+    ) {
+        self.capturedTarget = capturedTarget
+        self.failCapturedInsert = failCapturedInsert
+    }
+
+    func captureTarget() -> FocusedInputTarget? {
+        capturedTarget
+    }
 
     func insert(_ text: String) throws {
         insertedText = text
+    }
+
+    func insert(_ text: String, into target: FocusedInputTarget) throws {
+        if failCapturedInsert {
+            throw InsertionError.unsupportedFocusedElement
+        }
+
+        insertedIntoCapturedTargetText = text
     }
 }
 
@@ -428,7 +539,12 @@ private final class StubClipboardStore: ClipboardStoring {
 }
 
 private struct FailingFocusedTextInserter: FocusedTextInserter {
+    func captureTarget() -> FocusedInputTarget? { nil }
     func insert(_ text: String) throws {
+        throw InsertionError.unsupportedFocusedElement
+    }
+
+    func insert(_ text: String, into target: FocusedInputTarget) throws {
         throw InsertionError.unsupportedFocusedElement
     }
 }

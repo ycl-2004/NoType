@@ -2,7 +2,34 @@ import ApplicationServices
 
 @MainActor
 struct AccessibilityTextInserter: FocusedTextInserter {
+    func captureTarget() -> FocusedInputTarget? {
+        guard let focusedElement = currentFocusedElement() else {
+            return nil
+        }
+
+        return FocusedInputTarget(
+            element: focusedElement,
+            debugDescription: copyRoleDescription(from: focusedElement) ?? "focused-element"
+        )
+    }
+
     func insert(_ text: String) throws {
+        guard let focusedElement = currentFocusedElement() else {
+            throw InsertionError.unsupportedFocusedElement
+        }
+
+        try insert(text, intoElement: focusedElement)
+    }
+
+    func insert(_ text: String, into target: FocusedInputTarget) throws {
+        guard let targetElement = target.element else {
+            throw InsertionError.unsupportedFocusedElement
+        }
+
+        try insert(text, intoElement: targetElement)
+    }
+
+    private func currentFocusedElement() -> AXUIElement? {
         let systemWideElement = AXUIElementCreateSystemWide()
         var focusedElementValue: CFTypeRef?
         let focusedResult = AXUIElementCopyAttributeValue(
@@ -14,16 +41,18 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         guard focusedResult == .success,
               let focusedElementValue,
               CFGetTypeID(focusedElementValue) == AXUIElementGetTypeID() else {
-            throw InsertionError.unsupportedFocusedElement
+            return nil
         }
 
-        let focusedElement = unsafeDowncast(focusedElementValue, to: AXUIElement.self)
+        return unsafeDowncast(focusedElementValue, to: AXUIElement.self)
+    }
 
-        if try replaceSelectedText(in: focusedElement, with: text) {
+    private func insert(_ text: String, intoElement element: AXUIElement) throws {
+        if try replaceSelectedText(in: element, with: text) {
             return
         }
 
-        if try appendText(text, to: focusedElement) {
+        if try appendText(text, to: element) {
             return
         }
 
@@ -77,6 +106,11 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         }
 
         return value as? String
+    }
+
+    private func copyRoleDescription(from element: AXUIElement) -> String? {
+        copyStringAttribute(kAXRoleDescriptionAttribute, from: element)
+            ?? copyStringAttribute(kAXRoleAttribute, from: element)
     }
 
     private func copySelectedRange(from element: AXUIElement) -> NSRange? {
