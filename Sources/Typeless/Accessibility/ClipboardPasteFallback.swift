@@ -8,10 +8,20 @@ struct ClipboardPasteFallback: FallbackTextInserter {
         self.clipboardStore = clipboardStore
     }
 
-    func paste(_ text: String) throws {
+    func paste(_ text: String, preserveClipboard: Bool) throws {
+        let snapshot = preserveClipboard ? clipboardStore.snapshot() : nil
         try clipboardStore.setText(text)
         AppLogger.log("paste fallback: text copied to pasteboard, posting Command+V")
         try sendPasteShortcut()
+
+        guard preserveClipboard else {
+            return
+        }
+
+        // Give the target app a moment to read the transient pasteboard contents.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.12))
+        try clipboardStore.restore(snapshot)
+        AppLogger.log("paste fallback: original clipboard restored")
     }
 
     private func sendPasteShortcut() throws {

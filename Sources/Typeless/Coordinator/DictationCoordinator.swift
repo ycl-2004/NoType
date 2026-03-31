@@ -137,7 +137,7 @@ final class DictationCoordinator {
                 try focusedTextInserter.insert(text)
             } catch {
                 AppLogger.log("insert: direct accessibility insert failed, falling back to paste")
-                try fallbackTextInserter.paste(text)
+                try fallbackTextInserter.paste(text, preserveClipboard: false)
             }
         case .transcriptCopied:
             try clipboardStore.setText(text)
@@ -155,7 +155,7 @@ final class DictationCoordinator {
                 try focusedTextInserter.insert(text)
             } catch {
                 AppLogger.log("insert: direct accessibility insert failed in insert-only mode, falling back to paste")
-                try fallbackTextInserter.paste(text)
+                try fallbackTextInserter.paste(text, preserveClipboard: true)
             }
         }
     }

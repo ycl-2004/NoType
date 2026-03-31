@@ -257,8 +257,36 @@ struct DictationCoordinatorTests {
 
         #expect(appState.dictationState == .idle)
         #expect(fallback.pastedText == "Hello 你好")
+        #expect(fallback.preserveClipboard == true)
         #expect(clipboardStore.text == nil)
         #expect(appState.statusText == "Transcript inserted")
+    }
+
+    @Test
+    func bothModeFallbackStillLeavesTranscriptInClipboard() async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(.both)
+        let recorder = StubAudioRecorder()
+        let fallback = StubFallbackInserter()
+        let clipboardStore = StubClipboardStore()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: FailingFocusedTextInserter(),
+            fallbackTextInserter: fallback,
+            clipboardStore: clipboardStore
+        )
+        appState.update(for: .recording)
+        try? await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(fallback.pastedText == "Hello 你好")
+        #expect(fallback.preserveClipboard == false)
+        #expect(clipboardStore.text == "Hello 你好")
     }
 
     @Test
@@ -364,18 +392,38 @@ private final class RecordingFocusedTextInserter: FocusedTextInserter {
 @MainActor
 private final class StubFallbackInserter: FallbackTextInserter {
     private(set) var pastedText: String?
+    private(set) var preserveClipboard: Bool?
 
-    func paste(_ text: String) throws {
+    func paste(_ text: String, preserveClipboard: Bool) throws {
         pastedText = text
+        self.preserveClipboard = preserveClipboard
     }
 }
 
 @MainActor
 private final class StubClipboardStore: ClipboardStoring {
     private(set) var text: String?
+    private(set) var restoredSnapshot: ClipboardSnapshot?
+
+    func snapshot() -> ClipboardSnapshot? {
+        text.map { ClipboardSnapshot(items: [ClipboardSnapshotItem(representations: [.string: Data($0.utf8)])]) }
+    }
 
     func setText(_ text: String) throws {
         self.text = text
+    }
+
+    func restore(_ snapshot: ClipboardSnapshot?) throws {
+        restoredSnapshot = snapshot
+        guard let snapshot,
+              let item = snapshot.items.first,
+              let data = item.representations[.string],
+              let restoredText = String(data: data, encoding: .utf8) else {
+            text = nil
+            return
+        }
+
+        text = restoredText
     }
 }
 

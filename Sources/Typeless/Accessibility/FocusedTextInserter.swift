@@ -5,5 +5,5 @@ protocol FocusedTextInserter {
 
 @MainActor
 protocol FallbackTextInserter {
-    func paste(_ text: String) throws
+    func paste(_ text: String, preserveClipboard: Bool) throws
 }
