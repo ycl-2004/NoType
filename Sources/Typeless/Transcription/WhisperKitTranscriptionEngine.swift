@@ -20,6 +20,18 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         let text: String
     }
 
+    struct TranscriptFeatures: Equatable {
+        let trimmedText: String
+        let latinCount: Int
+        let cjkCount: Int
+        let hasLatin: Bool
+        let hasCJK: Bool
+        let isMixed: Bool
+        let hasTranslationStyleEnglish: Bool
+        let likelySingleLanguageCollapse: Bool
+        let preservedTermCount: Int
+    }
+
     private var whisperKit: WhisperKit?
     nonisolated static let mixedBaseLanguageCode = "zh"
     nonisolated static let mixedPromptText = """
@@ -169,11 +181,136 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         from results: [AttemptResult],
         preferredLanguage: DictationRecognitionLanguage
     ) -> AttemptResult? {
-        results
-            .filter { !shouldRetryAfterTranscriptionResult($0.text) }
-            .max { lhs, rhs in
-                transcriptScore(lhs.text, for: preferredLanguage) < transcriptScore(rhs.text, for: preferredLanguage)
+        let filteredResults = results.filter { !shouldRetryAfterTranscriptionResult($0.text) }
+
+        guard !filteredResults.isEmpty else {
+            return nil
+        }
+
+        if preferredLanguage == .mixed {
+            return selectBestMixedTranscript(from: filteredResults)
+        }
+
+        return filteredResults.max { lhs, rhs in
+            transcriptScore(lhs.text, for: preferredLanguage) < transcriptScore(rhs.text, for: preferredLanguage)
+        }
+    }
+
+    nonisolated static func analyzeTranscript(
+        _ text: String,
+        attempt: TranscriptionAttempt,
+        preferredLanguage: DictationRecognitionLanguage
+    ) -> TranscriptFeatures {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scalarView = trimmed.unicodeScalars
+        let latinCount = scalarView.filter { CharacterSet.letters.contains($0) && $0.value < 128 }.count
+        let cjkCount = scalarView.filter { (0x4E00...0x9FFF).contains($0.value) }.count
+        let hasLatin = latinCount > 0
+        let hasCJK = cjkCount > 0
+        let isMixed = hasLatin && hasCJK && latinCount >= 4 && cjkCount >= 2
+        let lowercase = trimmed.lowercased()
+        let translationStylePhrases = [
+            "i want to ",
+            "can you help me ",
+            "let's ",
+            "please help me ",
+            "i need to "
+        ]
+        let hasTranslationStyleEnglish =
+            !isMixed &&
+            !hasCJK &&
+            translationStylePhrases.contains(where: { lowercase.contains($0) })
+
+        let preservedTerms = trimmed
+            .split(whereSeparator: { $0.isWhitespace || $0.isPunctuation })
+            .map(String.init)
+            .filter { token in
+                let hasASCII = token.unicodeScalars.contains { CharacterSet.letters.contains($0) && $0.value < 128 }
+                guard hasASCII else { return false }
+
+                let lower = token.lowercased()
+                let knownTerms = ["slack", "figma", "notion", "github", "zoom", "amy"]
+                let hasInternalCapital = token.dropFirst().contains(where: \.isUppercase)
+                let startsUppercase = token.first?.isUppercase == true
+                return knownTerms.contains(lower) || hasInternalCapital || startsUppercase
             }
+
+        let likelySingleLanguageCollapse: Bool
+        if preferredLanguage == .mixed {
+            let substantialEnglish = latinCount >= 12 && cjkCount <= 1
+            let substantialChinese = cjkCount >= 8 && latinCount <= 1
+            likelySingleLanguageCollapse =
+                !isMixed &&
+                (hasTranslationStyleEnglish ||
+                 attempt.kind == .forcedEnglish && substantialEnglish ||
+                 attempt.kind == .forcedChinese && substantialChinese)
+        } else {
+            likelySingleLanguageCollapse = false
+        }
+
+        return TranscriptFeatures(
+            trimmedText: trimmed,
+            latinCount: latinCount,
+            cjkCount: cjkCount,
+            hasLatin: hasLatin,
+            hasCJK: hasCJK,
+            isMixed: isMixed,
+            hasTranslationStyleEnglish: hasTranslationStyleEnglish,
+            likelySingleLanguageCollapse: likelySingleLanguageCollapse,
+            preservedTermCount: preservedTerms.count
+        )
+    }
+
+    nonisolated static func selectBestMixedTranscript(
+        from results: [AttemptResult]
+    ) -> AttemptResult? {
+        let analyzed = results.map { result in
+            (result: result, features: analyzeTranscript(result.text, attempt: result.attempt, preferredLanguage: .mixed))
+        }
+        let hasMixedCandidate = analyzed.contains { $0.features.isMixed }
+
+        return analyzed.max { lhs, rhs in
+            mixedCandidateScore(lhs.features, attempt: lhs.result.attempt, hasMixedCandidate: hasMixedCandidate, text: lhs.result.text) <
+                mixedCandidateScore(rhs.features, attempt: rhs.result.attempt, hasMixedCandidate: hasMixedCandidate, text: rhs.result.text)
+        }?.result
+    }
+
+    nonisolated static func mixedCandidateScore(
+        _ features: TranscriptFeatures,
+        attempt: TranscriptionAttempt,
+        hasMixedCandidate: Bool,
+        text: String
+    ) -> Int {
+        var score = transcriptScore(text, for: .mixed)
+
+        if features.isMixed {
+            score += 320
+        }
+
+        if features.hasLatin && features.hasCJK && !features.isMixed {
+            score -= 260
+        }
+
+        if features.hasTranslationStyleEnglish {
+            score -= 220
+        }
+
+        if features.likelySingleLanguageCollapse {
+            score -= hasMixedCandidate ? 520 : 120
+        }
+
+        score += features.preservedTermCount * 35
+
+        switch attempt.kind {
+        case .autoDetect:
+            score += 20
+        case .forcedChinese:
+            score += features.isMixed ? 10 : 0
+        case .forcedEnglish:
+            score += 0
+        }
+
+        return score
     }
 
     nonisolated static func transcriptScore(

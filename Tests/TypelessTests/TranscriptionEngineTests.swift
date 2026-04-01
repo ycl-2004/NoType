@@ -132,6 +132,133 @@ struct TranscriptionEngineTests {
     }
 
     @Test
+    func mixedTranscriptSelectionPrefersFaithfulMixedOutputOverSmoothEnglishRewrite() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "I want to schedule a meeting with Amy tomorrow"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "我明天想 schedule 一个 meeting 给 Amy"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                    text: "schedule meeting Amy tomorrow"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "我明天想 schedule 一个 meeting 给 Amy")
+    }
+
+    @Test
+    func mixedTranscriptSelectionKeepsEnglishLedCodeSwitching() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "Can you 帮我 ping 一下 Amy about the launch"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "你可以帮我联系 Amy 关于发布"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                    text: "Can you help me ping Amy about the launch"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "Can you 帮我 ping 一下 Amy about the launch")
+    }
+
+    @Test
+    func transcriptAnalysisDetectsTranslationStyleEnglishPattern() {
+        let features = WhisperKitTranscriptionEngine.analyzeTranscript(
+            "I want to schedule a meeting tomorrow",
+            attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+            preferredLanguage: .mixed
+        )
+
+        #expect(features.hasTranslationStyleEnglish == true)
+        #expect(features.isMixed == false)
+    }
+
+    @Test
+    func mixedTranscriptSelectionAllowsPureChineseWhenSpeechIsActuallyChinese() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "我明天想开会"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "我明天想开会"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                    text: "I want to have a meeting tomorrow"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "我明天想开会")
+    }
+
+    @Test
+    func mixedTranscriptSelectionAllowsPureEnglishWhenSpeechIsActuallyEnglish() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "Can you send Amy the update tomorrow"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "你可以明天把更新发给 Amy 吗"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                    text: "Can you send Amy the update tomorrow"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "Can you send Amy the update tomorrow")
+    }
+
+    @Test
+    func mixedTranscriptSelectionPrefersCandidateThatPreservesProductTerms() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "我想在 Slack 发个 message 给 Amy about the Figma file"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "我想给 Amy 发消息关于那个设计文件"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+                    text: "I want to send Amy a message about the design file"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "我想在 Slack 发个 message 给 Amy about the Figma file")
+    }
+
+    @Test
     func chineseTranscriptSelectionKeepsCodeSwitchedChineseLead() {
         let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
             from: [
