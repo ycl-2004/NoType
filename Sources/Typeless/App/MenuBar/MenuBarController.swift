@@ -124,10 +124,12 @@ final class MenuBarController: NSObject {
     }
 
     private func updateStatusButton(_ button: NSStatusBarButton) {
-        let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-        let image = NSImage(systemSymbolName: statusSymbolName, accessibilityDescription: "noType")
-        image?.isTemplate = true
-        button.image = image?.withSymbolConfiguration(configuration)
+        let configuration = MenuBarIconRenderer.Configuration(
+            state: appState.dictationState,
+            recognitionLanguage: appState.selectedRecognitionLanguage,
+            chineseScriptPreference: appState.selectedChineseScriptPreference
+        )
+        button.image = MenuBarIconRenderer.makeImage(for: configuration) ?? MenuBarIconRenderer.baseSymbolImage(for: appState.dictationState)
         button.title = ""
         button.toolTip = statusToolTip
     }

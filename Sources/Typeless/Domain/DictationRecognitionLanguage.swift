@@ -37,4 +37,15 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
             "zh"
         }
     }
+
+    var menuBarMarker: String {
+        switch self {
+        case .mixed:
+            "A"
+        case .english:
+            "EN"
+        case .chinese:
+            "中"
+        }
+    }
 }

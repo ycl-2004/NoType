@@ -26,4 +26,28 @@ enum ChineseScriptPreference: String, CaseIterable, Equatable {
             "Traditional Chinese"
         }
     }
+
+    var menuBarMarker: String {
+        switch self {
+        case .followModel:
+            ""
+        case .simplified:
+            "简"
+        case .traditional:
+            "繁"
+        }
+    }
+
+    func shouldShowMenuBarMarker(for language: DictationRecognitionLanguage) -> Bool {
+        guard self != .followModel else {
+            return false
+        }
+
+        switch language {
+        case .mixed, .chinese:
+            return true
+        case .english:
+            return false
+        }
+    }
 }
