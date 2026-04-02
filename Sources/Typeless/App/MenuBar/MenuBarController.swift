@@ -1,5 +1,10 @@
 import AppKit
 
+enum ManagedShortcut {
+    case dictation
+    case recognitionMode
+}
+
 @MainActor
 final class MenuBarController: NSObject {
     private let appState: AppState
@@ -73,8 +78,9 @@ final class MenuBarController: NSObject {
         permissionsMenuItem.submenu = permissionsMenu()
         menu.addItem(permissionsMenuItem)
 
-        let shortcutItem = NSMenuItem(title: "Shortcut: Command + Shift + H", action: nil, keyEquivalent: "")
-        menu.addItem(shortcutItem)
+        let shortcutsMenuItem = NSMenuItem(title: "Shortcuts", action: nil, keyEquivalent: "")
+        shortcutsMenuItem.submenu = shortcutsMenu()
+        menu.addItem(shortcutsMenuItem)
 
         let logPathItem = NSMenuItem(title: "Log: \(AppLogger.debugLogURL.path)", action: nil, keyEquivalent: "")
         menu.addItem(logPathItem)
@@ -220,6 +226,51 @@ final class MenuBarController: NSObject {
         return menu
     }
 
+    func shortcutsMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let dictationItem = NSMenuItem(
+            title: dictationShortcutMenuTitle,
+            action: #selector(handleDictationShortcutToggle),
+            keyEquivalent: ""
+        )
+        dictationItem.target = self
+        dictationItem.state = appState.isDictationShortcutEnabled ? .on : .off
+        menu.addItem(dictationItem)
+
+        let recognitionModeItem = NSMenuItem(
+            title: recognitionModeShortcutMenuTitle,
+            action: #selector(handleRecognitionModeShortcutToggle),
+            keyEquivalent: ""
+        )
+        recognitionModeItem.target = self
+        recognitionModeItem.state = appState.isRecognitionModeShortcutEnabled ? .on : .off
+        menu.addItem(recognitionModeItem)
+
+        return menu
+    }
+
+    var dictationShortcutMenuTitle: String {
+        Self.shortcutMenuTitle(for: .dictation, isEnabled: appState.isDictationShortcutEnabled)
+    }
+
+    var recognitionModeShortcutMenuTitle: String {
+        Self.shortcutMenuTitle(for: .recognitionMode, isEnabled: appState.isRecognitionModeShortcutEnabled)
+    }
+
+    static func shortcutMenuTitle(for shortcut: ManagedShortcut, isEnabled: Bool) -> String {
+        switch (shortcut, isEnabled) {
+        case (.dictation, true):
+            "Dictation Shortcut: Command + Shift + H"
+        case (.dictation, false):
+            "Dictation Shortcut: Disabled"
+        case (.recognitionMode, true):
+            "Recognition Mode Shortcut: Command + Shift + Y"
+        case (.recognitionMode, false):
+            "Recognition Mode Shortcut: Disabled"
+        }
+    }
+
     @objc
     private func handleToggle() {
         Task { [coordinator] in
@@ -258,6 +309,26 @@ final class MenuBarController: NSObject {
 
         appState.setChineseScriptPreference(preference)
         appState.setDebugMessage("Chinese script set to \(preference.statusDescription)")
+    }
+
+    @objc
+    func handleDictationShortcutToggle() {
+        appState.setDictationShortcutEnabled(!appState.isDictationShortcutEnabled)
+        appState.setDebugMessage(
+            appState.isDictationShortcutEnabled
+                ? "Dictation shortcut enabled"
+                : "Dictation shortcut disabled"
+        )
+    }
+
+    @objc
+    func handleRecognitionModeShortcutToggle() {
+        appState.setRecognitionModeShortcutEnabled(!appState.isRecognitionModeShortcutEnabled)
+        appState.setDebugMessage(
+            appState.isRecognitionModeShortcutEnabled
+                ? "Recognition mode shortcut enabled"
+                : "Recognition mode shortcut disabled"
+        )
     }
 
     @objc

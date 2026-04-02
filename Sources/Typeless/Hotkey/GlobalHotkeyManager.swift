@@ -3,17 +3,38 @@ import Foundation
 
 @MainActor
 final class GlobalHotkeyManager {
+    enum HotkeyKind {
+        case dictation
+        case recognitionModeCycle
+
+        var id: UInt32 {
+            switch self {
+            case .dictation:
+                1
+            case .recognitionModeCycle:
+                2
+            }
+        }
+
+        var signature: FourCharCode {
+            fourCharCode(from: "TYPL")
+        }
+    }
+
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
+    private let hotkeyKind: HotkeyKind
     private let keyCombination: KeyCombination
     private let onHotkeyPressed: @MainActor () -> Void
     private var lastTriggerTime: CFAbsoluteTime = 0
     private let minimumTriggerInterval: CFAbsoluteTime = 0.35
 
     init(
+        hotkeyKind: HotkeyKind = .dictation,
         keyCombination: KeyCombination = .defaultDictationShortcut,
         onHotkeyPressed: @escaping @MainActor () -> Void
     ) {
+        self.hotkeyKind = hotkeyKind
         self.keyCombination = keyCombination
         self.onHotkeyPressed = onHotkeyPressed
     }
@@ -35,6 +56,10 @@ final class GlobalHotkeyManager {
             )
 
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+            guard hotKeyID.signature == manager.hotkeyKind.signature,
+                  hotKeyID.id == manager.hotkeyKind.id else {
+                return noErr
+            }
             Task { @MainActor in
                 let now = CFAbsoluteTimeGetCurrent()
                 guard now - manager.lastTriggerTime > manager.minimumTriggerInterval else {
@@ -55,7 +80,7 @@ final class GlobalHotkeyManager {
             &eventHandlerRef
         )
 
-        let hotKeyID = EventHotKeyID(signature: fourCharCode(from: "TYPL"), id: 1)
+        let hotKeyID = EventHotKeyID(signature: hotkeyKind.signature, id: hotkeyKind.id)
         RegisterEventHotKey(
             keyCombination.keyCode,
             keyCombination.modifiers,

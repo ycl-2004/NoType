@@ -5,7 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var appState: AppState!
     private(set) var coordinator: DictationCoordinator!
     private var menuBarController: MenuBarController?
-    private var hotkeyManager: GlobalHotkeyManager?
+    private var dictationHotkeyManager: GlobalHotkeyManager?
+    private var recognitionModeHotkeyManager: GlobalHotkeyManager?
     private let microphonePermissionManager = MicrophonePermissionManager()
     private let accessibilityPermissionManager = AccessibilityPermissionManager()
     private let permissionSettingsOpener = SystemSettingsOpener()
@@ -24,17 +25,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             accessibilityPermissionManager: accessibilityPermissionManager,
             permissionSettingsOpener: permissionSettingsOpener
         )
-        hotkeyManager = GlobalHotkeyManager { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.coordinator.toggleDictation()
-            }
+        let existingOnChange = appState.onChange
+        appState.onChange = { [weak self] in
+            existingOnChange?()
+            self?.refreshHotkeyRegistration()
         }
-        hotkeyManager?.register()
+        refreshHotkeyRegistration()
         NSApp.setActivationPolicy(.accessory)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        hotkeyManager?.unregister()
+        dictationHotkeyManager?.unregister()
+        recognitionModeHotkeyManager?.unregister()
+    }
+
+    private func refreshHotkeyRegistration() {
+        if appState.isDictationShortcutEnabled {
+            if dictationHotkeyManager == nil {
+                dictationHotkeyManager = GlobalHotkeyManager(
+                    hotkeyKind: .dictation,
+                    keyCombination: .defaultDictationShortcut
+                ) { [weak self] in
+                    guard let self else { return }
+                    Task { @MainActor in
+                        await self.coordinator.toggleDictation()
+                    }
+                }
+                dictationHotkeyManager?.register()
+            }
+        } else {
+            dictationHotkeyManager?.unregister()
+            dictationHotkeyManager = nil
+        }
+
+        if appState.isRecognitionModeShortcutEnabled {
+            if recognitionModeHotkeyManager == nil {
+                recognitionModeHotkeyManager = GlobalHotkeyManager(
+                    hotkeyKind: .recognitionModeCycle,
+                    keyCombination: .recognitionModeShortcut
+                ) { [weak self] in
+                    guard let self else { return }
+                    let nextLanguage = self.appState.selectedRecognitionLanguage.nextCycleValue
+                    self.appState.setRecognitionLanguage(nextLanguage)
+                    self.appState.setDebugMessage("Recognition language set to \(nextLanguage.statusDescription)")
+                }
+                recognitionModeHotkeyManager?.register()
+            }
+        } else {
+            recognitionModeHotkeyManager?.unregister()
+            recognitionModeHotkeyManager = nil
+        }
     }
 }

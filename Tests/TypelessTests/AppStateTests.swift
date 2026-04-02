@@ -91,4 +91,33 @@ struct AppStateTests {
 
         #expect(appState.selectedSuccessStatusMode == .transcriptCopied)
     }
+
+    @Test
+    func defaultsShortcutTogglesToEnabled() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+
+        let appState = AppState(userDefaults: defaults)
+
+        #expect(appState.isDictationShortcutEnabled == true)
+        #expect(appState.isRecognitionModeShortcutEnabled == true)
+    }
+
+    @Test
+    func loadsSavedShortcutToggleSettingsFromUserDefaults() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.set(false, forKey: "dictationShortcutEnabled")
+        defaults.set(true, forKey: "recognitionModeShortcutEnabled")
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+
+        let appState = AppState(userDefaults: defaults)
+
+        #expect(appState.isDictationShortcutEnabled == false)
+        #expect(appState.isRecognitionModeShortcutEnabled == true)
+    }
 }

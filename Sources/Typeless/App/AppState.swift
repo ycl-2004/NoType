@@ -6,6 +6,8 @@ final class AppState: ObservableObject {
         static let recognitionLanguage = "recognitionLanguage"
         static let chineseScriptPreference = "chineseScriptPreference"
         static let successStatusMode = "successStatusMode"
+        static let dictationShortcutEnabled = "dictationShortcutEnabled"
+        static let recognitionModeShortcutEnabled = "recognitionModeShortcutEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -33,6 +35,18 @@ final class AppState: ObservableObject {
             onChange?()
         }
     }
+    @Published var isDictationShortcutEnabled: Bool {
+        didSet {
+            userDefaults.set(isDictationShortcutEnabled, forKey: DefaultsKey.dictationShortcutEnabled)
+            onChange?()
+        }
+    }
+    @Published var isRecognitionModeShortcutEnabled: Bool {
+        didSet {
+            userDefaults.set(isRecognitionModeShortcutEnabled, forKey: DefaultsKey.recognitionModeShortcutEnabled)
+            onChange?()
+        }
+    }
     var onChange: (() -> Void)?
 
     init(userDefaults: UserDefaults = .standard) {
@@ -43,6 +57,8 @@ final class AppState: ObservableObject {
         selectedChineseScriptPreference = ChineseScriptPreference(rawValue: savedChineseScriptPreference ?? "") ?? .followModel
         let savedSuccessStatus = userDefaults.string(forKey: DefaultsKey.successStatusMode)
         selectedSuccessStatusMode = DictationSuccessStatusMode(rawValue: savedSuccessStatus ?? "") ?? .both
+        isDictationShortcutEnabled = userDefaults.object(forKey: DefaultsKey.dictationShortcutEnabled) as? Bool ?? true
+        isRecognitionModeShortcutEnabled = userDefaults.object(forKey: DefaultsKey.recognitionModeShortcutEnabled) as? Bool ?? true
     }
 
     func update(for state: DictationState) {
@@ -91,5 +107,15 @@ final class AppState: ObservableObject {
     func setSuccessStatusMode(_ mode: DictationSuccessStatusMode) {
         guard selectedSuccessStatusMode != mode else { return }
         selectedSuccessStatusMode = mode
+    }
+
+    func setDictationShortcutEnabled(_ enabled: Bool) {
+        guard isDictationShortcutEnabled != enabled else { return }
+        isDictationShortcutEnabled = enabled
+    }
+
+    func setRecognitionModeShortcutEnabled(_ enabled: Bool) {
+        guard isRecognitionModeShortcutEnabled != enabled else { return }
+        isRecognitionModeShortcutEnabled = enabled
     }
 }

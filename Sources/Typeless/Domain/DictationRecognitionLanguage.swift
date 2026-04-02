@@ -48,4 +48,15 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
             "中"
         }
     }
+
+    var nextCycleValue: DictationRecognitionLanguage {
+        switch self {
+        case .mixed:
+            .chinese
+        case .chinese:
+            .english
+        case .english:
+            .mixed
+        }
+    }
 }
