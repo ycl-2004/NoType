@@ -4,6 +4,7 @@ import Foundation
 final class AppState: ObservableObject {
     private enum DefaultsKey {
         static let recognitionLanguage = "recognitionLanguage"
+        static let chineseScriptPreference = "chineseScriptPreference"
         static let successStatusMode = "successStatusMode"
     }
 
@@ -20,6 +21,12 @@ final class AppState: ObservableObject {
             onChange?()
         }
     }
+    @Published var selectedChineseScriptPreference: ChineseScriptPreference {
+        didSet {
+            userDefaults.set(selectedChineseScriptPreference.rawValue, forKey: DefaultsKey.chineseScriptPreference)
+            onChange?()
+        }
+    }
     @Published var selectedSuccessStatusMode: DictationSuccessStatusMode {
         didSet {
             userDefaults.set(selectedSuccessStatusMode.rawValue, forKey: DefaultsKey.successStatusMode)
@@ -32,6 +39,8 @@ final class AppState: ObservableObject {
         self.userDefaults = userDefaults
         let savedValue = userDefaults.string(forKey: DefaultsKey.recognitionLanguage)
         selectedRecognitionLanguage = DictationRecognitionLanguage(rawValue: savedValue ?? "") ?? .mixed
+        let savedChineseScriptPreference = userDefaults.string(forKey: DefaultsKey.chineseScriptPreference)
+        selectedChineseScriptPreference = ChineseScriptPreference(rawValue: savedChineseScriptPreference ?? "") ?? .followModel
         let savedSuccessStatus = userDefaults.string(forKey: DefaultsKey.successStatusMode)
         selectedSuccessStatusMode = DictationSuccessStatusMode(rawValue: savedSuccessStatus ?? "") ?? .both
     }
@@ -72,6 +81,11 @@ final class AppState: ObservableObject {
     func setRecognitionLanguage(_ language: DictationRecognitionLanguage) {
         guard selectedRecognitionLanguage != language else { return }
         selectedRecognitionLanguage = language
+    }
+
+    func setChineseScriptPreference(_ preference: ChineseScriptPreference) {
+        guard selectedChineseScriptPreference != preference else { return }
+        selectedChineseScriptPreference = preference
     }
 
     func setSuccessStatusMode(_ mode: DictationSuccessStatusMode) {

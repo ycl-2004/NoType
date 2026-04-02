@@ -41,6 +41,32 @@ struct AppStateTests {
     }
 
     @Test
+    func defaultsChineseScriptPreferenceToFollowModel() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+
+        let appState = AppState(userDefaults: defaults)
+
+        #expect(appState.selectedChineseScriptPreference == .followModel)
+    }
+
+    @Test
+    func loadsSavedChineseScriptPreferenceFromUserDefaults() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.set(ChineseScriptPreference.traditional.rawValue, forKey: "chineseScriptPreference")
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+
+        let appState = AppState(userDefaults: defaults)
+
+        #expect(appState.selectedChineseScriptPreference == .traditional)
+    }
+
+    @Test
     func defaultsSuccessStatusModeToBoth() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

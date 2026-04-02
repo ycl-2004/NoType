@@ -317,6 +317,48 @@ struct TranscriptionEngineTests {
     }
 
     @Test
+    func transcriptPostProcessorRemovesTrailingThankYouHallucination() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "我們明天再同步一次進度 Thank you",
+            preferredLanguage: .mixed
+        )
+
+        #expect(cleaned == "我們明天再同步一次進度")
+    }
+
+    @Test
+    func transcriptPostProcessorPreservesStandaloneThankYou() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "Thank you",
+            preferredLanguage: .english
+        )
+
+        #expect(cleaned == "Thank you")
+    }
+
+    @Test
+    func transcriptPostProcessorCanConvertToTraditionalChinese() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "后台开发要先发给Amy确认",
+            preferredLanguage: .chinese,
+            chineseScriptPreference: .traditional
+        )
+
+        #expect(cleaned == "後台開發要先發給Amy確認")
+    }
+
+    @Test
+    func transcriptPostProcessorCanConvertToSimplifiedChinese() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "後台開發要先發給Amy確認",
+            preferredLanguage: .mixed,
+            chineseScriptPreference: .simplified
+        )
+
+        #expect(cleaned == "后台开发要先发给Amy确认")
+    }
+
+    @Test
     func localWhisperPathValidationRequiresLargeV3Model() {
         #expect(LocalWhisperPaths.validationError() == nil)
         #expect(LocalWhisperPaths.modelFolder.contains(LocalWhisperPaths.expectedModelIdentifier))

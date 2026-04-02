@@ -4,10 +4,16 @@ import ApplicationServices
 final class FocusedInputTarget {
     let element: AXUIElement?
     let debugDescription: String
+    let capturedValue: String?
 
-    init(element: AXUIElement?, debugDescription: String = "unknown") {
+    init(
+        element: AXUIElement?,
+        debugDescription: String = "unknown",
+        capturedValue: String? = nil
+    ) {
         self.element = element
         self.debugDescription = debugDescription
+        self.capturedValue = capturedValue
     }
 }
 

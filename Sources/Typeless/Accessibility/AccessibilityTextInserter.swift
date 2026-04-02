@@ -9,7 +9,8 @@ struct AccessibilityTextInserter: FocusedTextInserter {
 
         return FocusedInputTarget(
             element: focusedElement,
-            debugDescription: copyRoleDescription(from: focusedElement) ?? "focused-element"
+            debugDescription: copyRoleDescription(from: focusedElement) ?? "focused-element",
+            capturedValue: copyStringAttribute(kAXValueAttribute, from: focusedElement)
         )
     }
 
@@ -26,7 +27,7 @@ struct AccessibilityTextInserter: FocusedTextInserter {
             throw InsertionError.unsupportedFocusedElement
         }
 
-        try insert(text, intoElement: targetElement)
+        try insert(text, intoElement: targetElement, capturedValue: target.capturedValue)
     }
 
     private func currentFocusedElement() -> AXUIElement? {
@@ -47,21 +48,33 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         return unsafeDowncast(focusedElementValue, to: AXUIElement.self)
     }
 
-    private func insert(_ text: String, intoElement element: AXUIElement) throws {
-        if try replaceSelectedText(in: element, with: text) {
+    private func insert(
+        _ text: String,
+        intoElement element: AXUIElement,
+        capturedValue: String? = nil
+    ) throws {
+        if try replaceSelectedText(in: element, with: text, capturedValue: capturedValue) {
             return
         }
 
-        if try appendText(text, to: element) {
+        if try appendText(text, to: element, capturedValue: capturedValue) {
             return
         }
 
         throw InsertionError.unsupportedFocusedElement
     }
 
-    private func replaceSelectedText(in element: AXUIElement, with text: String) throws -> Bool {
+    private func replaceSelectedText(
+        in element: AXUIElement,
+        with text: String,
+        capturedValue: String?
+    ) throws -> Bool {
         guard let currentValue = copyStringAttribute(kAXValueAttribute, from: element),
               let selectedRange = copySelectedRange(from: element) else {
+            return false
+        }
+
+        if let capturedValue, capturedValue != currentValue {
             return false
         }
 
@@ -80,11 +93,19 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         let newCaretLocation = selectedRange.location + (text as NSString).length
         let newRange = NSRange(location: newCaretLocation, length: 0)
         _ = setSelectedRange(newRange, on: element)
-        return true
+        return verifyValue(updatedValue, on: element)
     }
 
-    private func appendText(_ text: String, to element: AXUIElement) throws -> Bool {
+    private func appendText(
+        _ text: String,
+        to element: AXUIElement,
+        capturedValue: String?
+    ) throws -> Bool {
         guard let currentValue = copyStringAttribute(kAXValueAttribute, from: element) else {
+            return false
+        }
+
+        if let capturedValue, capturedValue != currentValue {
             return false
         }
 
@@ -95,7 +116,7 @@ struct AccessibilityTextInserter: FocusedTextInserter {
 
         let endLocation = (updatedValue as NSString).length
         _ = setSelectedRange(NSRange(location: endLocation, length: 0), on: element)
-        return true
+        return verifyValue(updatedValue, on: element)
     }
 
     private func copyStringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
@@ -150,5 +171,14 @@ struct AccessibilityTextInserter: FocusedTextInserter {
             kAXSelectedTextRangeAttribute as CFString,
             axValue
         ) == .success
+    }
+
+    private func verifyValue(_ expectedValue: String, on element: AXUIElement) -> Bool {
+        guard copyStringAttribute(kAXValueAttribute, from: element) == expectedValue else {
+            AppLogger.log("insert: accessibility write verification failed")
+            return false
+        }
+
+        return true
     }
 }

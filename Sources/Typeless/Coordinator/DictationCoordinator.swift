@@ -114,8 +114,13 @@ final class DictationCoordinator {
             let clip = try await audioRecorder.stopRecording()
             AppLogger.log("stopDictation: clip recorded at \(clip.fileURL.path)")
             let recognitionLanguage = appState.selectedRecognitionLanguage
+            let chineseScriptPreference = appState.selectedChineseScriptPreference
             appState.setDebugMessage("Running WhisperKit (\(recognitionLanguage.statusDescription))")
-            let transcript = try await transcriptionEngine.transcribe(clip, language: recognitionLanguage)
+            let transcript = try await transcriptionEngine.transcribe(
+                clip,
+                language: recognitionLanguage,
+                chineseScriptPreference: chineseScriptPreference
+            )
             appState.setTranscriptPreview(transcript.text)
             appState.update(for: .inserting)
             AppLogger.log("stopDictation: transcript length=\(transcript.text.count)")
@@ -230,6 +235,13 @@ final class DictationCoordinator {
 
         AppLogger.log("insert: reactivating target app \(targetApplication.bundleIdentifier ?? "unknown")")
         targetApplication.activate()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.12))
+
+        let timeout = Date().addingTimeInterval(0.6)
+        while NSWorkspace.shared.frontmostApplication?.processIdentifier != targetApplication.processIdentifier,
+              Date() < timeout {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+        }
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.08))
     }
 }

@@ -134,6 +134,29 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func selectedChineseScriptPreferenceIsPassedToTranscriptionEngine() async {
+        let appState = makeTestAppState()
+        appState.setChineseScriptPreference(.traditional)
+        let recorder = StubAudioRecorder()
+        let transcriptionEngine = RecordingStubTranscriptionEngine(result: .init(text: "你好"))
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: transcriptionEngine,
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter()
+        )
+        appState.update(for: .recording)
+        try? await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(transcriptionEngine.receivedChineseScriptPreference == .traditional)
+    }
+
+    @Test
     func successfulInsertionStillUpdatesClipboard() async {
         let appState = makeTestAppState()
         let recorder = StubAudioRecorder()
@@ -442,7 +465,11 @@ private final class StubAccessibilityPermissionManager: AccessibilityPermissionM
 private struct StubTranscriptionEngine: TranscriptionEngine {
     let result: TranscriptResult
 
-    func transcribe(_ clip: RecordedAudioClip, language: DictationRecognitionLanguage) async throws -> TranscriptResult {
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference _: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
         result
     }
 }
@@ -451,13 +478,19 @@ private struct StubTranscriptionEngine: TranscriptionEngine {
 private final class RecordingStubTranscriptionEngine: TranscriptionEngine {
     let result: TranscriptResult
     private(set) var receivedLanguage: DictationRecognitionLanguage?
+    private(set) var receivedChineseScriptPreference: ChineseScriptPreference?
 
     init(result: TranscriptResult) {
         self.result = result
     }
 
-    func transcribe(_ clip: RecordedAudioClip, language: DictationRecognitionLanguage) async throws -> TranscriptResult {
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
         receivedLanguage = language
+        receivedChineseScriptPreference = chineseScriptPreference
         return result
     }
 }

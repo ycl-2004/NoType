@@ -46,7 +46,11 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
     同一句里可能同时出现中文和英文。
     """
 
-    func transcribe(_ clip: RecordedAudioClip, language: DictationRecognitionLanguage) async throws -> TranscriptResult {
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
         let pipeline = try await loadPipeline()
         var attemptResults: [AttemptResult] = []
 
@@ -75,7 +79,11 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
 
         if let bestResult = Self.selectBestTranscript(from: attemptResults, preferredLanguage: language),
            !Self.shouldRetryAfterTranscriptionResult(bestResult.text) {
-            let cleanedText = TranscriptPostProcessor.clean(bestResult.text, preferredLanguage: language)
+            let cleanedText = TranscriptPostProcessor.clean(
+                bestResult.text,
+                preferredLanguage: language,
+                chineseScriptPreference: chineseScriptPreference
+            )
             AppLogger.log(
                 "WhisperKit: selected best transcript from \(attemptResults.count) attempts using \(String(describing: bestResult.attempt.kind)); " +
                 "raw=\"\(bestResult.text)\" cleaned=\"\(cleanedText)\""

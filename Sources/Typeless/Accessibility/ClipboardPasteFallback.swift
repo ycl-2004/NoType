@@ -29,7 +29,7 @@ struct ClipboardPasteFallback: FallbackTextInserter {
             throw InsertionError.pasteFailed
         }
 
-        RunLoop.current.run(until: Date().addingTimeInterval(0.08))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.18))
 
         let keyV: CGKeyCode = 9
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: true),

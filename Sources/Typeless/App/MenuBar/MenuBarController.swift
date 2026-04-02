@@ -57,6 +57,14 @@ final class MenuBarController: NSObject {
         languageMenuItem.submenu = recognitionLanguageMenu()
         menu.addItem(languageMenuItem)
 
+        let chineseScriptMenuItem = NSMenuItem(
+            title: "Chinese Script: \(appState.selectedChineseScriptPreference.menuTitle)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        chineseScriptMenuItem.submenu = chineseScriptPreferenceMenu()
+        menu.addItem(chineseScriptMenuItem)
+
         let successStatusMenuItem = NSMenuItem(title: "Success Status: \(appState.selectedSuccessStatusMode.menuTitle)", action: nil, keyEquivalent: "")
         successStatusMenuItem.submenu = successStatusModeMenu()
         menu.addItem(successStatusMenuItem)
@@ -160,6 +168,24 @@ final class MenuBarController: NSObject {
         return menu
     }
 
+    private func chineseScriptPreferenceMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        for preference in ChineseScriptPreference.allCases {
+            let item = NSMenuItem(
+                title: preference.menuTitle,
+                action: #selector(handleChineseScriptPreferenceSelection(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = preference.rawValue
+            item.state = appState.selectedChineseScriptPreference == preference ? .on : .off
+            menu.addItem(item)
+        }
+
+        return menu
+    }
+
     private func permissionsMenu() -> NSMenu {
         let menu = NSMenu()
 
@@ -219,6 +245,17 @@ final class MenuBarController: NSObject {
 
         appState.setSuccessStatusMode(mode)
         appState.setDebugMessage("Success status set to \(mode.menuTitle)")
+    }
+
+    @objc
+    private func handleChineseScriptPreferenceSelection(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let preference = ChineseScriptPreference(rawValue: rawValue) else {
+            return
+        }
+
+        appState.setChineseScriptPreference(preference)
+        appState.setDebugMessage("Chinese script set to \(preference.statusDescription)")
     }
 
     @objc
