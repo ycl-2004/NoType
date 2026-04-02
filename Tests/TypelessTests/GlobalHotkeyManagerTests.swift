@@ -17,4 +17,12 @@ struct GlobalHotkeyManagerTests {
     func hotkeyManagerUsesDistinctIdentifiersPerShortcut() {
         #expect(GlobalHotkeyManager.HotkeyKind.dictation.id != GlobalHotkeyManager.HotkeyKind.recognitionModeCycle.id)
     }
+
+    @Test
+    func hotkeyManagerUsesDistinctRegistryKeysPerShortcut() {
+        #expect(
+            GlobalHotkeyManager.HotkeyKind.dictation.registryKey !=
+                GlobalHotkeyManager.HotkeyKind.recognitionModeCycle.registryKey
+        )
+    }
 }

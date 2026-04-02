@@ -51,7 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         await self.coordinator.toggleDictation()
                     }
                 }
-                dictationHotkeyManager?.register()
+                if dictationHotkeyManager?.register() != true {
+                    appState.setDebugMessage("Failed to enable dictation shortcut")
+                    dictationHotkeyManager = nil
+                }
             }
         } else {
             dictationHotkeyManager?.unregister()
@@ -69,7 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.appState.setRecognitionLanguage(nextLanguage)
                     self.appState.setDebugMessage("Recognition language set to \(nextLanguage.statusDescription)")
                 }
-                recognitionModeHotkeyManager?.register()
+                if recognitionModeHotkeyManager?.register() != true {
+                    appState.setDebugMessage("Failed to enable recognition mode shortcut")
+                    recognitionModeHotkeyManager = nil
+                }
             }
         } else {
             recognitionModeHotkeyManager?.unregister()
