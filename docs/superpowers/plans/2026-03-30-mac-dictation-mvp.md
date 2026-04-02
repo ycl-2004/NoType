@@ -9,7 +9,6 @@
 **Tech Stack:** Swift, SwiftUI, AppKit, AVAudioEngine, WhisperKit, Accessibility API, XCTest
 
 ---
-
 ## File Structure
 
 This project starts from an empty directory. Keep the first version small and explicit.
