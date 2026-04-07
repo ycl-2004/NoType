@@ -63,7 +63,7 @@ enum MenuBarIconRenderer {
 
     static func baseSymbolImage(for state: DictationState) -> NSImage? {
         let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-        let image = NSImage(systemSymbolName: symbolName(for: state), accessibilityDescription: "noType")
+        let image = NSImage(systemSymbolName: symbolName(for: state), accessibilityDescription: "NoType")
         image?.isTemplate = true
         return image?.withSymbolConfiguration(configuration)
     }

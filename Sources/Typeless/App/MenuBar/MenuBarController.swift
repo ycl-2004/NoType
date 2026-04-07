@@ -87,7 +87,7 @@ final class MenuBarController: NSObject {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit noType", action: #selector(handleQuit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit NoType", action: #selector(handleQuit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -119,7 +119,7 @@ final class MenuBarController: NSObject {
     }
 
     private var statusToolTip: String {
-        "noType: \(appState.statusText)"
+        "NoType: \(appState.statusText)"
     }
 
     private func configureStatusItem() {
