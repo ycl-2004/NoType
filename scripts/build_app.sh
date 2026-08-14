@@ -15,6 +15,9 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ICON_SOURCE=""
 ICONSET_DIR="$ROOT_DIR/.build/AppIcon.iconset"
 ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
+INCLUDE_MODEL="${INCLUDE_MODEL:-0}"
+WHISPER_MODEL_DIR="${WHISPER_MODEL_DIR:-/Users/yichenlin/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930}"
+WHISPER_TOKENIZER_DIR="${WHISPER_TOKENIZER_DIR:-/Users/yichenlin/Documents/huggingface/models/openai/whisper-large-v3}"
 
 for candidate in "App_icon.png" "App_Icon.png"; do
   if [[ -f "$ROOT_DIR/$candidate" ]]; then
@@ -40,6 +43,35 @@ cp "$BUILD_DIR/$EXECUTABLE_NAME" "$MACOS_DIR/$EXECUTABLE_NAME"
 chmod +x "$MACOS_DIR/$EXECUTABLE_NAME"
 
 find "$BUILD_DIR" -maxdepth 1 -name '*.bundle' -exec cp -R {} "$RESOURCES_DIR/" \;
+
+if [[ "$INCLUDE_MODEL" == "1" ]]; then
+  if [[ ! -d "$WHISPER_MODEL_DIR" ]]; then
+    echo "Whisper model directory not found: $WHISPER_MODEL_DIR" >&2
+    exit 1
+  fi
+  if [[ ! -f "$WHISPER_TOKENIZER_DIR/tokenizer.json" ]]; then
+    echo "Whisper tokenizer.json not found in: $WHISPER_TOKENIZER_DIR" >&2
+    exit 1
+  fi
+
+  MODEL_RESOURCE_NAME="$(basename "$WHISPER_MODEL_DIR")"
+  if [[ "$MODEL_RESOURCE_NAME" != *large-v3* ]]; then
+    echo "Expected a large-v3 model directory, got: $WHISPER_MODEL_DIR" >&2
+    exit 1
+  fi
+
+  if ! command -v rsync >/dev/null 2>&1; then
+    echo "rsync is required to bundle the model without local cache files" >&2
+    exit 1
+  fi
+
+  echo "Bundling Whisper model from $WHISPER_MODEL_DIR"
+  mkdir -p "$RESOURCES_DIR/$MODEL_RESOURCE_NAME"
+  rsync -a --exclude='.DS_Store' --exclude='.cache' "$WHISPER_MODEL_DIR/" "$RESOURCES_DIR/$MODEL_RESOURCE_NAME/"
+  mkdir -p "$RESOURCES_DIR/models/openai"
+  mkdir -p "$RESOURCES_DIR/models/openai/$(basename "$WHISPER_TOKENIZER_DIR")"
+  rsync -a --exclude='.DS_Store' --exclude='.cache' "$WHISPER_TOKENIZER_DIR/" "$RESOURCES_DIR/models/openai/$(basename "$WHISPER_TOKENIZER_DIR")/"
+fi
 
 if [[ -n "$ICON_SOURCE" ]]; then
   ICON_WIDTH="$(sips -g pixelWidth "$ICON_SOURCE" | awk '/pixelWidth:/ { print $2 }')"
@@ -75,7 +107,8 @@ fi
 touch "$APP_DIR"
 
 echo "Signing app bundle..."
-codesign --force --deep --sign - "$APP_DIR"
+SIGNING_IDENTITY="${CODESIGN_IDENTITY:--}"
+codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_DIR"
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
 echo "App ready: $APP_DIR"
