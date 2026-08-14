@@ -6,6 +6,8 @@ final class AppState: ObservableObject {
         static let recognitionLanguage = "recognitionLanguage"
         static let chineseScriptPreference = "chineseScriptPreference"
         static let successStatusMode = "successStatusMode"
+        static let dictationShortcutChoice = "dictationShortcutChoice"
+        static let recognitionModeShortcutChoice = "recognitionModeShortcutChoice"
         static let dictationShortcutEnabled = "dictationShortcutEnabled"
         static let recognitionModeShortcutEnabled = "recognitionModeShortcutEnabled"
     }
@@ -35,15 +37,15 @@ final class AppState: ObservableObject {
             onChange?()
         }
     }
-    @Published var isDictationShortcutEnabled: Bool {
+    @Published var selectedDictationShortcut: DictationShortcutChoice {
         didSet {
-            userDefaults.set(isDictationShortcutEnabled, forKey: DefaultsKey.dictationShortcutEnabled)
+            userDefaults.set(selectedDictationShortcut.rawValue, forKey: DefaultsKey.dictationShortcutChoice)
             onChange?()
         }
     }
-    @Published var isRecognitionModeShortcutEnabled: Bool {
+    @Published var selectedRecognitionModeShortcut: RecognitionModeShortcutChoice {
         didSet {
-            userDefaults.set(isRecognitionModeShortcutEnabled, forKey: DefaultsKey.recognitionModeShortcutEnabled)
+            userDefaults.set(selectedRecognitionModeShortcut.rawValue, forKey: DefaultsKey.recognitionModeShortcutChoice)
             onChange?()
         }
     }
@@ -57,8 +59,8 @@ final class AppState: ObservableObject {
         selectedChineseScriptPreference = ChineseScriptPreference(rawValue: savedChineseScriptPreference ?? "") ?? .followModel
         let savedSuccessStatus = userDefaults.string(forKey: DefaultsKey.successStatusMode)
         selectedSuccessStatusMode = DictationSuccessStatusMode(rawValue: savedSuccessStatus ?? "") ?? .both
-        isDictationShortcutEnabled = userDefaults.object(forKey: DefaultsKey.dictationShortcutEnabled) as? Bool ?? true
-        isRecognitionModeShortcutEnabled = userDefaults.object(forKey: DefaultsKey.recognitionModeShortcutEnabled) as? Bool ?? true
+        selectedDictationShortcut = Self.loadDictationShortcut(from: userDefaults)
+        selectedRecognitionModeShortcut = Self.loadRecognitionModeShortcut(from: userDefaults)
     }
 
     func update(for state: DictationState) {
@@ -109,13 +111,39 @@ final class AppState: ObservableObject {
         selectedSuccessStatusMode = mode
     }
 
-    func setDictationShortcutEnabled(_ enabled: Bool) {
-        guard isDictationShortcutEnabled != enabled else { return }
-        isDictationShortcutEnabled = enabled
+    func setDictationShortcut(_ shortcut: DictationShortcutChoice) {
+        guard selectedDictationShortcut != shortcut else { return }
+        selectedDictationShortcut = shortcut
     }
 
-    func setRecognitionModeShortcutEnabled(_ enabled: Bool) {
-        guard isRecognitionModeShortcutEnabled != enabled else { return }
-        isRecognitionModeShortcutEnabled = enabled
+    func setRecognitionModeShortcut(_ shortcut: RecognitionModeShortcutChoice) {
+        guard selectedRecognitionModeShortcut != shortcut else { return }
+        selectedRecognitionModeShortcut = shortcut
+    }
+
+    private static func loadDictationShortcut(from userDefaults: UserDefaults) -> DictationShortcutChoice {
+        if let rawValue = userDefaults.string(forKey: DefaultsKey.dictationShortcutChoice),
+           let savedChoice = DictationShortcutChoice(rawValue: rawValue) {
+            return savedChoice
+        }
+
+        if let legacyEnabled = userDefaults.object(forKey: DefaultsKey.dictationShortcutEnabled) as? Bool {
+            return legacyEnabled ? .doubleCommand : .disabled
+        }
+
+        return .doubleCommand
+    }
+
+    private static func loadRecognitionModeShortcut(from userDefaults: UserDefaults) -> RecognitionModeShortcutChoice {
+        if let rawValue = userDefaults.string(forKey: DefaultsKey.recognitionModeShortcutChoice),
+           let savedChoice = RecognitionModeShortcutChoice(rawValue: rawValue) {
+            return savedChoice
+        }
+
+        if let legacyEnabled = userDefaults.object(forKey: DefaultsKey.recognitionModeShortcutEnabled) as? Bool {
+            return legacyEnabled ? .commandShiftY : .disabled
+        }
+
+        return .commandShiftY
     }
 }

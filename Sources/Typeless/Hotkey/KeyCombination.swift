@@ -13,4 +13,14 @@ struct KeyCombination: Equatable {
         keyCode: UInt32(kVK_ANSI_Y),
         modifiers: UInt32(cmdKey | shiftKey)
     )
+
+    static let recognitionModeCommandOptionShortcut = KeyCombination(
+        keyCode: UInt32(kVK_ANSI_Y),
+        modifiers: UInt32(cmdKey | optionKey)
+    )
+
+    static let recognitionModeControlOptionShortcut = KeyCombination(
+        keyCode: UInt32(kVK_ANSI_Y),
+        modifiers: UInt32(controlKey | optionKey)
+    )
 }

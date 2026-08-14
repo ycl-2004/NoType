@@ -74,4 +74,8 @@ fi
 
 touch "$APP_DIR"
 
+echo "Signing app bundle..."
+codesign --force --deep --sign - "$APP_DIR"
+codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+
 echo "App ready: $APP_DIR"
