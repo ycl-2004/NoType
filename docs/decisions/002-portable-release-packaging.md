@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — implemented in NoType 0.2.0
 
 ## Date
 
@@ -27,6 +27,8 @@ The release script:
 
 The model is intentionally not committed to Git. GitHub Release assets carry the large binary separately from source history.
 
+The decision is implemented and published as [NoType 0.2.0](https://github.com/ycl-2004/NoType/releases/tag/build-2026-08-14), built from commit `07c6364`. The published ZIP is approximately 1.4 GB and contains the approximately 1.5 GB model bundle plus tokenizer.
+
 ## Alternatives Considered
 
 ### Download the model on first launch
@@ -48,6 +50,20 @@ This is the correct eventual public distribution path, but no valid signing iden
 ## Consequences
 
 - The download is large, approximately 1.5 GB before ZIP compression.
+- The published ZIP is approximately 1.4 GB and the extracted app is approximately 1.5 GB; users should keep roughly 4 GB free during download and extraction.
 - The first release is simple, self-contained, and does not need runtime model downloads.
 - A future runtime-download design may reduce download size but will require an explicit download manager and versioned model endpoint.
 - Public distribution still needs Developer ID signing and notarization to remove the Gatekeeper warning.
+
+## Verification
+
+- `swift test`: 78 tests in 8 suites passed.
+- `./scripts/build_release.sh`: completed from commit `07c6364`.
+- `codesign --verify --deep --strict`: passed for the app bundle.
+- The ZIP checksum matched the published GitHub Release asset digest.
+
+## References
+
+- [Apple: Developer ID](https://developer.apple.com/support/developer-id/)
+- [Apple: Distributing software on macOS](https://developer.apple.com/macos/distribution/)
+- [GitHub: About releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
