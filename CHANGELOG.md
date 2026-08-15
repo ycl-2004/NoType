@@ -2,9 +2,41 @@
 
 All notable user-facing changes to NoType are recorded here.
 
+## [0.3.0] - 2026-08-14
+
+Release: [v0.3.0](https://github.com/ycl-2004/NoType/releases/tag/v0.3.0)
+
+### Added
+
+- Added a new Orbit-inspired YC app icon that visualizes microphone input, a speech waveform, and text output.
+- Added background model preloading after launch to reduce the delay before the first dictation.
+
+### Changed
+
+- Conclusive transcription attempts now skip unnecessary language fallbacks, reducing avoidable processing time.
+- Transcript cleanup more carefully removes filler sounds and hallucinated closing phrases without deleting ordinary speech.
+- The release version is now `0.3.0` with build number `3`.
+
+### Fixed
+
+- Very short accidental recordings and empty cleaned transcripts now finish without overwriting the clipboard.
+- Temporary recordings are deleted after both successful and failed transcriptions, and orphaned clips are cleaned up at launch.
+- Completed transcripts are not redirected into a different chat or text field when the original input target has changed.
+
+### Verification
+
+- 104 tests passed across 8 suites.
+- Release ZIP, packaged icon, bundled model/tokenizer, whole-bundle signature, and SHA-256 checksum verified.
+
+### Known limitations
+
+- The release is Apple Silicon-only and requires macOS 15.0 or newer.
+- The current build is ad-hoc signed; Developer ID signing and notarization are still pending.
+- There is no automatic in-app updater.
+
 ## [0.2.0] - 2026-08-14
 
-Release: [build-2026-08-14](https://github.com/ycl-2004/NoType/releases/tag/build-2026-08-14)
+Source tag: [build-2026-08-14](https://github.com/ycl-2004/NoType/tree/build-2026-08-14) — superseded by NoType 0.3.0.
 
 ### Added
 

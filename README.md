@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="App_Icon.png" alt="NoType logo" width="120" height="120">
+  <img src="App_icon.png" alt="NoType logo" width="120" height="120">
 </p>
 
 <h1 align="center">NoType</h1>
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
+  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.3.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
   ·
   <a href="https://github.com/ycl-2004/NoType/releases">Releases</a>
   ·
@@ -38,7 +38,7 @@ download before your first dictation.
 
 ## Quick start
 
-1. **[Download `NoType-0.2.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip)** and unzip it. The archive is about 1.4 GB because the local speech model is included.
+1. **[Download `NoType-0.3.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.3.0-arm64.zip)** and unzip it. The archive is about 1.4 GB because the local speech model is included.
 2. Move `NoType.app` to `/Applications`. On first launch, Control-click the app and choose **Open** — the current build is ad-hoc signed and not yet Apple-notarized.
 3. Allow **Microphone** access for recording and **Accessibility** access for global shortcuts and direct text insertion.
 
@@ -127,14 +127,14 @@ behavior, shortcuts, or permissions. The default shortcuts are:
 
 ## Current release
 
-NoType `0.2.0` is available as an Apple Silicon archive from the
-[`build-2026-08-14`](https://github.com/ycl-2004/NoType/releases/tag/build-2026-08-14)
+NoType `0.3.0` is available as an Apple Silicon archive from the
+[`v0.3.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.3.0)
 release.
 
 | Artifact | Purpose |
 | --- | --- |
-| `NoType-0.2.0-arm64.zip` | Ready-to-run app with the Whisper model and tokenizer included |
-| `NoType-0.2.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
+| `NoType-0.3.0-arm64.zip` | Ready-to-run app with the Whisper model and tokenizer included |
+| `NoType-0.3.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
 
 The app is approximately 1.5 GB after extraction. The model is distributed as a
 GitHub Release asset and is intentionally not committed to this repository.
@@ -228,8 +228,8 @@ tokenizer, signs the whole app bundle, and creates:
 
 ```text
 dist/NoType.app
-dist/NoType-0.2.0-arm64.zip
-dist/NoType-0.2.0-arm64.zip.sha256
+dist/NoType-0.3.0-arm64.zip
+dist/NoType-0.3.0-arm64.zip.sha256
 ```
 
 The default signature is ad-hoc. To use an installed Developer ID identity:

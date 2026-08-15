@@ -13,8 +13,10 @@ CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ICON_SOURCE=""
-ICONSET_DIR="$ROOT_DIR/.build/AppIcon.iconset"
-ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
+ASSET_CATALOG_DIR="$ROOT_DIR/.build/NoTypeIcons.xcassets"
+APP_ICONSET_DIR="$ASSET_CATALOG_DIR/AppIcon.appiconset"
+APP_ICON_MANIFEST="$ROOT_DIR/Packaging/AppIconContents.json"
+APP_ICON_PARTIAL_PLIST="$ROOT_DIR/.build/AppIcon-PartialInfo.plist"
 INCLUDE_MODEL="${INCLUDE_MODEL:-0}"
 WHISPER_MODEL_DIR="${WHISPER_MODEL_DIR:-/Users/yichenlin/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930}"
 WHISPER_TOKENIZER_DIR="${WHISPER_TOKENIZER_DIR:-/Users/yichenlin/Documents/huggingface/models/openai/whisper-large-v3}"
@@ -87,21 +89,34 @@ if [[ -n "$ICON_SOURCE" ]]; then
     exit 1
   fi
 
-  rm -rf "$ICONSET_DIR"
-  mkdir -p "$ICONSET_DIR"
+  if [[ ! -f "$APP_ICON_MANIFEST" ]]; then
+    echo "App icon manifest not found: $APP_ICON_MANIFEST" >&2
+    exit 1
+  fi
 
-  sips -z 16 16 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null
-  sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null
-  sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_32x32.png" >/dev/null
-  sips -z 64 64 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null
-  sips -z 128 128 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_128x128.png" >/dev/null
-  sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null
-  sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256.png" >/dev/null
-  sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null
-  sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
-  sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
+  rm -rf "$ASSET_CATALOG_DIR"
+  mkdir -p "$APP_ICONSET_DIR"
+  cp "$APP_ICON_MANIFEST" "$APP_ICONSET_DIR/Contents.json"
 
-  iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
+  sips -z 16 16 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_16x16.png" >/dev/null
+  sips -z 32 32 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_16x16@2x.png" >/dev/null
+  sips -z 32 32 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_32x32.png" >/dev/null
+  sips -z 64 64 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_32x32@2x.png" >/dev/null
+  sips -z 128 128 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_128x128.png" >/dev/null
+  sips -z 256 256 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_128x128@2x.png" >/dev/null
+  sips -z 256 256 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_256x256.png" >/dev/null
+  sips -z 512 512 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_256x256@2x.png" >/dev/null
+  sips -z 512 512 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_512x512.png" >/dev/null
+  sips -z 1024 1024 "$ICON_SOURCE" --out "$APP_ICONSET_DIR/icon_512x512@2x.png" >/dev/null
+
+  xcrun actool \
+    --compile "$RESOURCES_DIR" \
+    --platform macosx \
+    --minimum-deployment-target 15.0 \
+    --app-icon AppIcon \
+    --standalone-icon-behavior all \
+    --output-partial-info-plist "$APP_ICON_PARTIAL_PLIST" \
+    "$ASSET_CATALOG_DIR"
 fi
 
 touch "$APP_DIR"

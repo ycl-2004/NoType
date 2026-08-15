@@ -27,7 +27,7 @@ The release script:
 
 The model is intentionally not committed to Git. GitHub Release assets carry the large binary separately from source history.
 
-The decision is implemented and published as [NoType 0.2.0](https://github.com/ycl-2004/NoType/releases/tag/build-2026-08-14), built from commit `07c6364`. The published ZIP is approximately 1.4 GB and contains the approximately 1.5 GB model bundle plus tokenizer.
+The decision was first implemented for [NoType 0.2.0](https://github.com/ycl-2004/NoType/tree/build-2026-08-14), built from commit `07c6364`. Its ZIP was approximately 1.4 GB and contained the approximately 1.5 GB model bundle plus tokenizer. That release was later superseded by [NoType 0.3.0](https://github.com/ycl-2004/NoType/releases/tag/v0.3.0), which keeps the same self-contained packaging model.
 
 ## Alternatives Considered
 
