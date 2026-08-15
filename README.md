@@ -1,110 +1,230 @@
-# NoType
+<p align="center">
+  <img src="App_Icon.png" alt="NoType logo" width="120" height="120">
+</p>
 
-NoType is a native macOS menu-bar dictation app. It records speech locally, transcribes it with WhisperKit/Core ML, and inserts or copies the result into the focused app.
+<h1 align="center">NoType</h1>
 
-The current release runs the multilingual Whisper `large-v3` model locally. NoType does not send recordings to a remote transcription API, and the friend-downloadable build includes the model so a separate model setup is not required.
+<p align="center">
+  <strong>Private, local dictation for macOS — speak naturally and keep typing.</strong>
+</p>
 
-[Latest release](https://github.com/ycl-2004/NoType/releases/tag/build-2026-08-14) · [Direct download](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip) · [SHA-256](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip.sha256)
+<p align="center">
+  <a href="https://github.com/ycl-2004/NoType/releases/latest"><img src="https://img.shields.io/github/v/release/ycl-2004/NoType?label=release&color=111111" alt="Latest release"></a>
+  <a href="https://github.com/ycl-2004/NoType/releases"><img src="https://img.shields.io/github/downloads/ycl-2004/NoType/total?label=downloads&color=111111" alt="Total downloads"></a>
+  <img src="https://img.shields.io/badge/macOS-15.0%2B-111111?logo=apple&logoColor=white" alt="macOS 15.0 or later">
+  <img src="https://img.shields.io/badge/Mac-Apple%20Silicon-111111?logo=apple&logoColor=white" alt="Apple Silicon Mac">
+  <img src="https://img.shields.io/badge/Swift-WhisperKit%20%C2%B7%20Core%20ML-F05138?logo=swift&logoColor=white" alt="Built with Swift, WhisperKit, and Core ML">
+</p>
 
-## Current release
+<p align="center">
+  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
+  ·
+  <a href="https://github.com/ycl-2004/NoType/releases">Releases</a>
+  ·
+  <a href="#features">Features</a>
+  ·
+  <a href="#privacy">Privacy</a>
+  ·
+  <a href="#build-from-source">Build from source</a>
+</p>
 
-NoType `0.2.0` was built from commit `07c6364` and published as GitHub release `build-2026-08-14`.
+NoType is a native macOS menu-bar dictation app. Focus a text field, start
+dictation, speak, and stop — NoType transcribes your voice locally and inserts
+the result back into the app you were using.
 
-The release archive is:
+The downloadable build includes the multilingual Whisper `large-v3` model and
+its tokenizer. There is no account, no remote transcription API, and no model
+download before your first dictation.
 
-- `NoType-0.2.0-arm64.zip`, approximately 1.4 GB to download.
-- Approximately 1.5 GB after extraction because it contains the Core ML model.
-- Accompanied by `NoType-0.2.0-arm64.zip.sha256`.
+## Quick start
 
-The archive contains both the WhisperKit `large-v3` Core ML model and its tokenizer. The model is not committed to Git; it is distributed as a GitHub Release asset instead.
+1. **[Download `NoType-0.2.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip)** and unzip it. The archive is about 1.4 GB because the local speech model is included.
+2. Move `NoType.app` to `/Applications`. On first launch, Control-click the app and choose **Open** — the current build is ad-hoc signed and not yet Apple-notarized.
+3. Allow **Microphone** access for recording and **Accessibility** access for global shortcuts and direct text insertion.
 
-## Install for friends
+Then focus any text field and double-tap **Command** to start. Double-tap it
+again to stop, transcribe, and insert the result.
 
-Friends do not need to clone the repository, install Swift, install Python, create a Hugging Face directory, run a script, or download Whisper separately.
+If Control-click → **Open** is unavailable, clear the quarantine flag:
 
-1. Download the [latest NoType ZIP](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.2.0-arm64.zip).
-2. Open the ZIP and move `NoType.app` to `/Applications`.
-3. Launch NoType from Applications.
-4. Allow microphone access when macOS asks.
-5. Allow NoType under System Settings → Privacy & Security → Accessibility so it can observe the global modifier shortcut and insert text into other apps.
-
-The first transcription uses the model already inside the app. The app is configured with `download: false`; if the bundled model is missing or damaged, it reports a model error instead of silently downloading another copy.
-
-### Gatekeeper note
-
-The current release is ad-hoc signed because no Developer ID certificate is configured for this project yet. macOS may show an unidentified-developer warning. If that happens, Control-click `NoType.app`, choose Open, and confirm once. The eventual public-distribution path is Developer ID signing followed by notarization; see Apple's [Developer ID guidance](https://developer.apple.com/support/developer-id/).
+```bash
+xattr -dr com.apple.quarantine /Applications/NoType.app
+open /Applications/NoType.app
+```
 
 ### System requirements
 
-The current release requires:
+- Apple Silicon Mac (`arm64`)
+- macOS 15.0 or later
+- About 4 GB of free space during download and extraction
+- Microphone permission for recording
+- Accessibility permission for global double-tap shortcuts and direct insertion
 
-- Apple Silicon (`arm64`). Intel Macs are not supported by this archive.
-- macOS 15.0 or newer.
-- At least about 4 GB of free space during download and extraction.
-- Microphone permission for recording.
-- Accessibility permission for the full dictation workflow.
+## Why NoType
 
-## Using NoType
+- **Your voice stays on your Mac.** Audio is transcribed through WhisperKit and Core ML; temporary recordings are deleted after each attempt.
+- **Chinese and English can share a sentence.** Auto mixed recognition is designed for code-switching, with Chinese-first and English-first modes when you want a stronger bias.
+- **The model arrives ready.** The release contains the `large-v3` model and tokenizer, so first use does not depend on a separate setup or download.
+- **It returns to the right place.** NoType remembers the focused input where dictation began. If that target changes, it keeps the transcript on the clipboard instead of inserting into the wrong field.
+- **It stays out of the way.** No windows are required for normal use; status, modes, permissions, shortcuts, and diagnostics live in the menu bar.
 
-The default dictation trigger is Double Command. It can be changed from the menu bar under Shortcuts to:
+## Features
 
-- Double Command
-- Double Option
-- Command + Shift + H
-- Disabled
+**Dictation**
 
-Recognition-mode cycling defaults to Command + Shift + Y and can be changed to Command + Option + Y, Control + Option + Y, or Disabled. Shortcut choices are stored per user and take effect immediately.
+- Start and stop from anywhere with Double Command, Double Option, or Command + Shift + H.
+- Automatic five-minute recording limit prevents an abandoned session from running indefinitely.
+- Very short accidental recordings are ignored instead of being sent through transcription.
+- The transcription model is prepared in the background after launch to reduce first-use waiting.
 
-The app supports mixed, Chinese, and English recognition modes, Chinese script preferences, transcript insertion/copy behavior, and a Diagnostics submenu for the latest debug event and log access.
+**Recognition**
 
-## Privacy and model behavior
+- **Auto (中英混说)** for natural mixed Chinese and English speech.
+- **中文优先** and **英文优先** for language-biased recognition.
+- Follow-model, Simplified Chinese, or Traditional Chinese output preferences.
+- A separate shortcut cycles recognition modes without opening the menu.
 
-- Transcription runs locally through WhisperKit/Core ML.
-- The release app contains the model and tokenizer needed for its first transcription.
-- No runtime model download is required by the release build.
-- Audio is recorded only when dictation is active and is processed by the local transcription pipeline.
-- Accessibility is used for focused-target capture and text insertion; it is not a replacement for microphone permission.
+**Text delivery**
 
-## Developer quick start
+- Insert and copy, insert only, or copy only after a successful transcription.
+- Direct Accessibility insertion with a paste fallback for apps that do not expose a compatible text field.
+- Captured-target protection prevents a completed transcript from landing in a different chat or document.
+- Clipboard-preserving fallback when insert-only mode needs to simulate a paste.
 
-The project uses Swift Package Manager and requires macOS 15.0 or newer.
+**Menu bar controls**
+
+- Live idle, recording, transcribing, inserting, and error states.
+- Recognition and Chinese-script markers visible in the menu-bar icon.
+- Configurable dictation and recognition-mode shortcuts that persist across launches.
+- Permission status, the latest diagnostic event, and direct access to the local debug log.
+
+## Usage
+
+1. Put the cursor where the transcript should appear.
+2. Double-tap **Command** to start recording.
+3. Speak normally. Mixed Chinese and English is supported in the default mode.
+4. Double-tap **Command** again to stop.
+5. NoType transcribes locally, returns to the captured app, and inserts or copies the transcript according to your selected success mode.
+
+Open the menu-bar icon to change recognition mode, Chinese script, output
+behavior, shortcuts, or permissions. The default shortcuts are:
+
+| Action | Default | Other choices |
+| --- | --- | --- |
+| Start / stop dictation | Double Command | Double Option, Command + Shift + H, Disabled |
+| Cycle recognition mode | Command + Shift + Y | Command + Option + Y, Control + Option + Y, Disabled |
+
+## Privacy
+
+- Speech recognition runs locally through WhisperKit and Core ML.
+- NoType does not use a remote transcription API.
+- The release build does not download a model at runtime.
+- Temporary audio is removed after transcription succeeds or fails.
+- There are no accounts, analytics, or telemetry in the app.
+- Microphone access is used only for active dictation.
+- Accessibility access is used for the global modifier shortcut, focused-target capture, and text insertion.
+- The clipboard is touched only when the selected output mode or an insertion fallback requires it.
+
+## Current release
+
+NoType `0.2.0` is available as an Apple Silicon archive from the
+[`build-2026-08-14`](https://github.com/ycl-2004/NoType/releases/tag/build-2026-08-14)
+release.
+
+| Artifact | Purpose |
+| --- | --- |
+| `NoType-0.2.0-arm64.zip` | Ready-to-run app with the Whisper model and tokenizer included |
+| `NoType-0.2.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
+
+The app is approximately 1.5 GB after extraction. The model is distributed as a
+GitHub Release asset and is intentionally not committed to this repository.
+
+## FAQ
+
+<details>
+<summary>macOS says NoType cannot be opened because the developer cannot be verified</summary>
+
+The current release is ad-hoc signed and not Apple-notarized. Control-click
+`NoType.app`, choose **Open**, and confirm once. You can also run the `xattr`
+command shown in [Quick start](#quick-start).
+
+</details>
+
+<details>
+<summary>Why is the download so large?</summary>
+
+NoType includes the Whisper `large-v3` Core ML model and its tokenizer. This
+makes the archive much larger, but it also means transcription works locally on
+first launch without downloading a model or sending speech to a server.
+
+</details>
+
+<details>
+<summary>Why does NoType need Microphone and Accessibility permission?</summary>
+
+**Microphone** permission lets NoType record while dictation is active.
+**Accessibility** permission lets it observe the global modifier shortcut,
+remember the focused input, and insert the finished transcript. Copy-only output
+still needs Microphone access but does not require direct text insertion.
+
+</details>
+
+<details>
+<summary>What happens if I switch chats or text fields while NoType is transcribing?</summary>
+
+NoType tries to return to the input captured when dictation started. If that
+specific target is no longer available, it copies the transcript instead of
+risking insertion into a different conversation or document.
+
+</details>
+
+<details>
+<summary>How do I uninstall NoType?</summary>
+
+Quit NoType from the menu-bar icon, then move `/Applications/NoType.app` to the
+Trash. You can revoke its permissions under **System Settings → Privacy &
+Security → Microphone / Accessibility**.
+
+</details>
+
+## Build from source
+
+<details>
+<summary>Requirements, build commands, and release packaging</summary>
+
+Requirements:
+
+- macOS 15.0 or later
+- Apple Silicon for the current release-packaging path
+- Swift 6.1 or a compatible Xcode toolchain
+- A local WhisperKit Core ML model and tokenizer for a self-contained release
 
 Run the test suite:
 
-```sh
+```bash
 swift test
 ```
 
-Build the small local app bundle:
+Build a small local app bundle:
 
-```sh
+```bash
 ./scripts/build_app.sh
 ```
 
-This creates `dist/NoType.app` without copying the 1.5 GB model. It is useful for compile and bundle checks. When run locally without bundled resources, the app falls back to the developer model path configured in `LocalWhisperPaths.swift`.
+This creates `dist/NoType.app` without copying the large model. It is useful for
+compile and bundle checks. A developer build without bundled resources uses the
+fallback paths configured in `LocalWhisperPaths.swift`.
 
-Build the friend-downloadable release archive:
+Build the self-contained release archive:
 
-```sh
-./scripts/build_release.sh
-```
-
-The release script builds the current checkout, bundles the model and tokenizer, signs the entire app bundle, creates a ZIP, and writes a SHA-256 file. By default it expects the developer's local model directories:
-
-```text
-/Users/yichenlin/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930
-/Users/yichenlin/Documents/huggingface/models/openai/whisper-large-v3
-```
-
-Use explicit paths on another build machine:
-
-```sh
+```bash
 WHISPER_MODEL_DIR="/path/to/openai_whisper-large-v3-v20240930" \
 WHISPER_TOKENIZER_DIR="/path/to/whisper-large-v3" \
 ./scripts/build_release.sh
 ```
 
-The output names are derived from `Packaging/Info.plist` and the current architecture:
+The packaging script builds the current checkout, bundles the model and
+tokenizer, signs the whole app bundle, and creates:
 
 ```text
 dist/NoType.app
@@ -112,57 +232,48 @@ dist/NoType-0.2.0-arm64.zip
 dist/NoType-0.2.0-arm64.zip.sha256
 ```
 
-The default signature is ad-hoc. If a valid Developer ID identity is installed, pass it through to the packaging script:
+The default signature is ad-hoc. To use an installed Developer ID identity:
 
-```sh
+```bash
 CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 ./scripts/build_release.sh
 ```
 
-The script verifies the signature with `codesign --verify --deep --strict`. Notarization is not automated yet; use Apple's [macOS distribution documentation](https://developer.apple.com/macos/distribution/) before treating a build as a public-quality signed release.
+The script verifies the signature with `codesign --verify --deep --strict`.
+Notarization is not automated yet; consult Apple's macOS distribution guidance
+before treating a build as a public, notarized release.
 
-## Release checklist
+</details>
 
-Before publishing a new release:
+## Project layout
 
-1. Update `CFBundleShortVersionString` and `CFBundleVersion` in `Packaging/Info.plist`.
-2. Confirm the intended source commit is checked out and the worktree is clean.
-3. Run `swift test`.
-4. Run `./scripts/build_release.sh` with the intended model and tokenizer paths.
-5. Verify the model resource, tokenizer, checksum, app version, and whole-bundle signature.
-6. Prefer Developer ID signing and notarization for releases intended beyond personal/friend testing.
-7. Create a dated GitHub Release and upload both the ZIP and `.sha256` file.
-8. Test the downloaded archive on a clean Apple Silicon Mac before sharing it widely.
-
-Do not commit the model into Git. Release assets are the intended home for the large binary.
-
-## Architecture
-
-- `Sources/Typeless/Audio`: microphone capture and recorded clips.
-- `Sources/Typeless/Transcription`: WhisperKit/Core ML loading, language selection, fallback attempts, and transcript post-processing.
-- `Sources/Typeless/Accessibility`: focused-target capture, direct insertion, clipboard handling, and paste fallback.
-- `Sources/Typeless/Coordinator`: dictation state transitions and orchestration.
-- `Sources/Typeless/App`: menu-bar UI, permissions, diagnostics, and application lifecycle.
-- `Sources/Typeless/Hotkey`: Carbon key combinations and modifier double-tap detection.
-- `Packaging/Info.plist`: app identity, version, permissions text, and macOS minimum version.
-- `scripts/build_app.sh`: local app-bundle build.
-- `scripts/build_release.sh`: model-bundled release packaging.
+- `Sources/Typeless/Audio/` — microphone capture and temporary recorded clips.
+- `Sources/Typeless/Transcription/` — WhisperKit loading, language attempts, selection, and transcript cleanup.
+- `Sources/Typeless/Accessibility/` — focused-target capture, direct insertion, clipboard handling, and paste fallback.
+- `Sources/Typeless/Coordinator/` — dictation state transitions and orchestration.
+- `Sources/Typeless/App/` — menu-bar UI, permissions, diagnostics, and app lifecycle.
+- `Sources/Typeless/Hotkey/` — Carbon shortcuts and modifier double-tap detection.
+- `Tests/TypelessTests/` — unit coverage for transcription, coordination, shortcuts, state, permissions, and menu presentation.
+- `Packaging/Info.plist` — app identity, version, permissions text, and minimum macOS version.
+- `scripts/` — local app and self-contained release builds.
+- `docs/decisions/` — product and engineering decision records.
 
 ## Known limitations
 
-- The current release is Apple Silicon only.
-- There is no in-app updater; users download each new release manually.
-- The model is currently fixed to Whisper `large-v3`; runtime model switching is not exposed.
-- The first public release is ad-hoc signed rather than Developer ID signed and notarized.
-- A clean-machine smoke test is part of the release checklist but is not performed by the packaging script itself.
+- The downloadable release supports Apple Silicon only.
+- macOS 15.0 or later is required.
+- The current public build is ad-hoc signed and not notarized.
+- There is no in-app updater; new versions are installed manually.
+- The release model is fixed to Whisper `large-v3`; model switching is not exposed in the app.
 
-## Documentation and decisions
+## Documentation
 
-- [CHANGELOG](CHANGELOG.md): shipped changes by release.
-- [Known issues](docs/known-issues.md): understood defects and future directions that are not currently being worked on.
-- [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md): why shortcuts use curated choices and double-tap monitors.
-- [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md): why the first release bundles the model instead of downloading it at runtime.
+- [Changelog](CHANGELOG.md) — shipped user-facing changes.
+- [Known issues](docs/known-issues.md) — understood limitations and future directions.
+- [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md) — why NoType uses curated shortcuts and modifier double-taps.
+- [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md) — why releases bundle the model instead of downloading it at runtime.
 
-## License and attribution
+## Third-party terms
 
-The repository includes the WhisperKit dependency under `Vendor/WhisperKit-main/LICENSE`. Review the dependency and model terms before redistributing NoType beyond personal or friend testing, and preserve the relevant notices in any wider distribution process.
+NoType uses WhisperKit. Its license is included at
+[`Vendor/WhisperKit-main/LICENSE`](Vendor/WhisperKit-main/LICENSE).
