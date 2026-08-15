@@ -1,36 +1,35 @@
-# Current Task: NoType 0.2.0 Documentation Refresh
+# Current Task: Commit Dictation Robustness Fixes
 
 ## Goal
 
-Bring the project documentation into alignment with the published NoType 0.2.0 release, including friend installation, bundled-model behavior, developer workflows, release operations, limitations, and current architecture.
+Review and commit the current dictation robustness changes while ensuring today's Git history contains no prohibited third-party attribution records.
 
 ## Acceptance Criteria
 
-- README contains a reliable direct download link for the published release and exact install steps.
-- README clearly states that the model/tokenizer are bundled and that friends do not run a setup script.
-- README documents system requirements, permissions, disk space, Gatekeeper behavior, architecture limits, and known limitations.
-- README documents test, local build, release build, checksum, signing, and release-upload workflows without developer-only assumptions being presented as friend setup.
-- CHANGELOG records the shipped 0.2.0 changes.
-- ADR-002 records the published release evidence and remaining notarization follow-up.
-- Documentation links and version/release references are internally consistent.
+- Current tracked and untracked changes are reviewed before staging.
+- All commits reachable from today's refs are checked for prohibited attribution metadata.
+- Any matching attribution is removed before the new commit; clean history is left unchanged.
+- The complete Swift test suite passes.
+- The resulting commit contains the intended dictation fixes, tests, and documentation only.
 
 ## Requirements List (Append Only)
 
-1. Update the project's README comprehensively for the current release.
-2. Update related project documentation that is now stale or incomplete.
-3. Explain the friend installation path separately from the developer/build path.
-4. Record what is included in the ZIP and what remains unfinished for formal public distribution.
-5. Preserve historical design documents and avoid rewriting completed implementation plans.
+1. Inspect and summarize the current code changes.
+2. Check today's commits for any prohibited third-party attribution records.
+3. Remove those records if present; otherwise do not rewrite history.
+4. Verify the current changes before committing them.
+5. Create a Git commit for the reviewed changes.
 
 ## Decision Log
 
-- Keep the root README as the canonical user/developer entry point.
-- Add a concise CHANGELOG instead of duplicating release notes across multiple documents.
-- Update ADR-002 with shipped-release evidence while preserving its original decision and alternatives.
+- Treat “today” as 2026-08-14 in the repository's configured America/Vancouver working timezone.
+- Scan all refs, full commit messages, authors, committers, and Git notes rather than checking subjects alone.
+- Leave history untouched because the attribution scan returned no matches.
+- Use the repository-documented unfiltered `swift test` command because filtered runs are a known issue.
 
 ## Evidence
 
-- Published release: `build-2026-08-14` / `NoType 0.2.0`.
-- Direct asset: `NoType-0.2.0-arm64.zip`.
-- Published release source baseline: `07c6364` on `main` and `origin/main`.
-- Root README, CHANGELOG, and ADR-002 updated; all added external links returned HTTP 200 on 2026-08-14.
+- Five commits were reachable from all refs since 2026-08-14 00:00:00 -0700.
+- Case-insensitive scans for the prohibited attribution markers returned no matches.
+- `git diff --check` passed before staging.
+- `swift test`: 104 tests in 8 suites passed on 2026-08-14.

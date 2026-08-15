@@ -80,12 +80,17 @@ final class AudioRecorder: NSObject, AudioRecording, @unchecked Sendable {
             throw AudioSessionError.missingOutputFile
         }
 
+        // currentTime resets once the recorder stops, so read it while it is still running.
+        let duration = audioRecorder?.currentTime
         audioRecorder?.stop()
         audioRecorder = nil
         self.currentClipURL = nil
         isRecording = false
-        AppLogger.log("AudioRecorder.stopRecording: finished recording to \(currentClipURL.path)")
+        AppLogger.log(
+            "AudioRecorder.stopRecording: finished recording to \(currentClipURL.path), " +
+            "duration=\(duration.map { String(format: "%.2fs", $0) } ?? "unknown")"
+        )
 
-        return RecordedAudioClip(fileURL: currentClipURL)
+        return RecordedAudioClip(fileURL: currentClipURL, duration: duration)
     }
 }

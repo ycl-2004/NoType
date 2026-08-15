@@ -23,6 +23,112 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func emptyTranscriptLeavesTheClipboardUntouched() async throws {
+        // Saying only "嗯" cleans down to an empty string. Writing that to the pasteboard would
+        // wipe whatever the user had copied, with no way to get it back.
+        let appState = makeTestAppState()
+        let recorder = StubAudioRecorder()
+        let clipboard = StubClipboardStore()
+        try clipboard.setText("something the user copied earlier")
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "   ")),
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboard
+        )
+        appState.update(for: .recording)
+        try await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(clipboard.text == "something the user copied earlier")
+        #expect(appState.dictationState == .idle)
+        #expect(appState.statusText == "Nothing to insert")
+        #expect(appState.lastError == nil)
+    }
+
+    @Test
+    func clipShorterThanTheMinimumSkipsTranscriptionEntirely() async throws {
+        let appState = makeTestAppState()
+        let recorder = FixedDurationAudioRecorder(duration: 0.1)
+        let engine = CallCountingTranscriptionEngine(result: .init(text: "谢谢大家"))
+        let clipboard = StubClipboardStore()
+        try clipboard.setText("previous clipboard")
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: engine,
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboard
+        )
+        appState.update(for: .recording)
+        try await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(engine.transcribeCallCount == 0)
+        #expect(clipboard.text == "previous clipboard")
+        #expect(appState.dictationState == .idle)
+        #expect(appState.statusText == "Too short, nothing captured")
+    }
+
+    @Test
+    func clipWithUnknownDurationIsStillTranscribed() async throws {
+        // A recorder that cannot report its duration must not be mistaken for a zero-length clip.
+        let appState = makeTestAppState()
+        let recorder = FixedDurationAudioRecorder(duration: nil)
+        let engine = CallCountingTranscriptionEngine(result: .init(text: "Hello 你好"))
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: engine,
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: StubClipboardStore()
+        )
+        appState.update(for: .recording)
+        try await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(engine.transcribeCallCount == 1)
+    }
+
+    @Test
+    func clipLongerThanTheMinimumIsTranscribedNormally() async throws {
+        let appState = makeTestAppState()
+        let recorder = FixedDurationAudioRecorder(duration: 2.5)
+        let engine = CallCountingTranscriptionEngine(result: .init(text: "Hello 你好"))
+        let clipboard = StubClipboardStore()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: engine,
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboard
+        )
+        appState.update(for: .recording)
+        try await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(engine.transcribeCallCount == 1)
+        #expect(clipboard.text == "Hello 你好")
+    }
+
+    @Test
     func recordedClipIsDeletedAfterSuccessfulTranscription() async throws {
         let appState = makeTestAppState()
         let recorder = TempFileAudioRecorder()
@@ -490,6 +596,46 @@ struct DictationCoordinatorTests {
 }
 
 @MainActor
+private final class FixedDurationAudioRecorder: AudioRecording, @unchecked Sendable {
+    private let duration: TimeInterval?
+    private var started = false
+
+    init(duration: TimeInterval?) {
+        self.duration = duration
+    }
+
+    func startRecording() async throws {
+        started = true
+    }
+
+    func stopRecording() async throws -> RecordedAudioClip {
+        guard started else {
+            throw AudioSessionError.missingOutputFile
+        }
+        started = false
+        return RecordedAudioClip(fileURL: URL(fileURLWithPath: "/tmp/fake.wav"), duration: duration)
+    }
+}
+
+@MainActor
+private final class CallCountingTranscriptionEngine: TranscriptionEngine {
+    let result: TranscriptResult
+    private(set) var transcribeCallCount = 0
+
+    init(result: TranscriptResult) {
+        self.result = result
+    }
+
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
+        transcribeCallCount += 1
+        return result
+    }
+}
+
 /// Writes a real file so tests can assert the clip is actually removed from disk.
 private final class TempFileAudioRecorder: AudioRecording, @unchecked Sendable {
     private(set) var lastClipURL: URL?

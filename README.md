@@ -159,6 +159,7 @@ Do not commit the model into Git. Release assets are the intended home for the l
 ## Documentation and decisions
 
 - [CHANGELOG](CHANGELOG.md): shipped changes by release.
+- [Known issues](docs/known-issues.md): understood defects and future directions that are not currently being worked on.
 - [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md): why shortcuts use curated choices and double-tap monitors.
 - [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md): why the first release bundles the model instead of downloading it at runtime.
 

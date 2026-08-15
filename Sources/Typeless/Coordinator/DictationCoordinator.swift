@@ -26,6 +26,13 @@ final class DictationCoordinator {
         }
     }
 
+    /// Recording stops itself after this long so a forgotten session cannot run unbounded.
+    static let maximumRecordingDuration: TimeInterval = 300
+
+    /// Anything shorter than this cannot contain speech — it is a mistrigger, a key bounce, or a
+    /// cough. Transcribing it only invites a hallucinated sign-off.
+    static let minimumClipDuration: TimeInterval = 0.3
+
     private let appState: AppState
     private let microphonePermissionManager: MicrophonePermissionManaging
     private let accessibilityPermissionManager: AccessibilityPermissionManaging
@@ -36,6 +43,7 @@ final class DictationCoordinator {
     private let clipboardStore: ClipboardStoring
     private var targetApplication: NSRunningApplication?
     private var targetInput: FocusedInputTarget?
+    private var recordingTimeoutTask: Task<Void, Never>?
 
     init(
         appState: AppState,
@@ -103,6 +111,7 @@ final class DictationCoordinator {
             appState.update(for: .recording)
             appState.setDebugMessage("Recorder started")
             AppLogger.log("startDictation: recorder started")
+            startRecordingTimeout()
         } catch AudioSessionError.invalidInputFormat {
             appState.setError(.invalidAudioInput)
             appState.setDebugMessage("Invalid audio input format")
@@ -114,7 +123,39 @@ final class DictationCoordinator {
         }
     }
 
+    private func startRecordingTimeout() {
+        recordingTimeoutTask?.cancel()
+        recordingTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.maximumRecordingDuration))
+            guard !Task.isCancelled, let self else { return }
+            await self.stopDictationAfterReachingTimeLimit()
+        }
+    }
+
+    private func cancelRecordingTimeout() {
+        recordingTimeoutTask?.cancel()
+        recordingTimeoutTask = nil
+    }
+
+    private func stopDictationAfterReachingTimeLimit() async {
+        guard appState.dictationState == .recording else { return }
+
+        AppLogger.log("stopDictation: reached the \(Int(Self.maximumRecordingDuration))s recording limit")
+        appState.setDebugMessage("Reached the recording time limit; transcribing what was captured")
+        await stopDictation()
+    }
+
+    /// Ends the session without inserting anything and, critically, without touching the
+    /// clipboard — overwriting it with an empty string would destroy whatever the user had copied.
+    private func finishWithoutInserting(statusText: String, debugMessage: String) {
+        appState.update(for: .idle)
+        appState.statusText = statusText
+        appState.setDebugMessage(debugMessage)
+        AppLogger.log("stopDictation: \(debugMessage)")
+    }
+
     private func stopDictation() async {
+        cancelRecordingTimeout()
         appState.update(for: .transcribing)
         appState.setDebugMessage("Stopping recorder")
         AppLogger.log("stopDictation: stopping recorder")
@@ -124,6 +165,14 @@ final class DictationCoordinator {
             // Runs on every exit from this scope, so a failed transcription cannot leak the audio.
             defer { clip.deleteFile() }
             AppLogger.log("stopDictation: clip recorded at \(clip.fileURL.path)")
+
+            if let duration = clip.duration, duration < Self.minimumClipDuration {
+                finishWithoutInserting(
+                    statusText: "Too short, nothing captured",
+                    debugMessage: "Clip was \(String(format: "%.2f", duration))s, below the \(Self.minimumClipDuration)s minimum; skipped transcription"
+                )
+                return
+            }
             let recognitionLanguage = appState.selectedRecognitionLanguage
             let chineseScriptPreference = appState.selectedChineseScriptPreference
             appState.setDebugMessage("Running WhisperKit (\(recognitionLanguage.statusDescription))")
@@ -132,6 +181,14 @@ final class DictationCoordinator {
                 language: recognitionLanguage,
                 chineseScriptPreference: chineseScriptPreference
             )
+            guard transcript.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+                finishWithoutInserting(
+                    statusText: "Nothing to insert",
+                    debugMessage: "Transcript was empty after cleanup; clipboard left untouched"
+                )
+                return
+            }
+
             appState.setTranscriptPreview(transcript.text)
             appState.update(for: .inserting)
             AppLogger.log("stopDictation: transcript length=\(transcript.text.count)")

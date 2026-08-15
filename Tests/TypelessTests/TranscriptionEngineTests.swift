@@ -490,6 +490,66 @@ struct TranscriptionEngineTests {
     }
 
     @Test
+    func transcriptPostProcessorKeepsLikeYouKnowAndIMeanAsRealWords() {
+        // "I like it" used to come out as "I it".
+        #expect(TranscriptPostProcessor.clean("I like it", preferredLanguage: .english) == "I like it")
+        #expect(
+            TranscriptPostProcessor.clean("I really like this design", preferredLanguage: .english)
+                == "I really like this design"
+        )
+        #expect(
+            TranscriptPostProcessor.clean("you know the answer", preferredLanguage: .english)
+                == "you know the answer"
+        )
+        #expect(TranscriptPostProcessor.clean("I mean it", preferredLanguage: .english) == "I mean it")
+        #expect(
+            TranscriptPostProcessor.clean("this looks like a bug", preferredLanguage: .english)
+                == "this looks like a bug"
+        )
+    }
+
+    @Test
+    func transcriptPostProcessorKeepsTrailingLikeButDropsTrailingYouKnow() {
+        #expect(
+            TranscriptPostProcessor.clean("what's it like", preferredLanguage: .english)
+                == "what's it like"
+        )
+        #expect(
+            TranscriptPostProcessor.clean("it went well you know", preferredLanguage: .english)
+                == "it went well"
+        )
+    }
+
+    @Test
+    func transcriptPostProcessorRemovesFillersThatArePausedOnBothSides() {
+        #expect(
+            TranscriptPostProcessor.clean("I was, like, really tired", preferredLanguage: .english)
+                == "I was, really tired"
+        )
+        #expect(
+            TranscriptPostProcessor.clean("we should, you know, ship it", preferredLanguage: .english)
+                == "we should, ship it"
+        )
+    }
+
+    @Test
+    func transcriptPostProcessorStillRemovesMeaninglessDisfluencies() {
+        #expect(TranscriptPostProcessor.clean("um I think so", preferredLanguage: .english) == "I think so")
+        #expect(TranscriptPostProcessor.clean("uh yes", preferredLanguage: .english) == "yes")
+        #expect(
+            TranscriptPostProcessor.clean("嗯 我想在 Slack 发个 message", preferredLanguage: .mixed)
+                == "我想在 Slack 发个 message"
+        )
+    }
+
+    @Test
+    func transcriptPostProcessorLeavesConnectedChineseSpeechUntouched() {
+        let spoken = "你先帮我看一下就是我们现在语音输入的话就是我们可能讲一句话然后它传给模型"
+
+        #expect(TranscriptPostProcessor.clean(spoken, preferredLanguage: .mixed) == spoken)
+    }
+
+    @Test
     func transcriptPostProcessorRemovesTrailingThankYouHallucination() {
         let cleaned = TranscriptPostProcessor.clean(
             "我們明天再同步一次進度 Thank you",
@@ -497,6 +557,48 @@ struct TranscriptionEngineTests {
         )
 
         #expect(cleaned == "我們明天再同步一次進度")
+    }
+
+    @Test
+    func transcriptPostProcessorRemovesSubtitleSignOffHallucination() {
+        // All three shapes were captured from real dictation logs.
+        #expect(
+            TranscriptPostProcessor.clean(
+                "然后确保所有东西都说有办法好理解的这样子越完整越细节越好谢谢大家",
+                preferredLanguage: .chinese
+            ) == "然后确保所有东西都说有办法好理解的这样子越完整越细节越好"
+        )
+        #expect(
+            TranscriptPostProcessor.clean(
+                "你也幫我把我們的Harness換成我們想要的顏色的風格這樣子谢谢大家",
+                preferredLanguage: .chinese
+            ) == "你也幫我把我們的Harness換成我們想要的顏色的風格這樣子"
+        )
+        #expect(
+            TranscriptPostProcessor.clean("我们明天再同步一次进度 谢谢观看", preferredLanguage: .chinese)
+                == "我们明天再同步一次进度"
+        )
+        #expect(
+            TranscriptPostProcessor.clean(
+                "这个功能已经做完了 请不吝点赞 订阅 转发 打赏",
+                preferredLanguage: .chinese
+            ) == "这个功能已经做完了"
+        )
+    }
+
+    @Test
+    func transcriptPostProcessorKeepsSignOffWordsThatAreNotAtTheEnd() {
+        // Spoken while reporting the bug itself: the phrase is quoted mid-sentence and must survive.
+        let spoken = "他会自动帮我写入一个谢谢大家就这四个字你帮我看一下这是为什么"
+
+        #expect(TranscriptPostProcessor.clean(spoken, preferredLanguage: .chinese) == spoken)
+    }
+
+    @Test
+    func transcriptPostProcessorPreservesStandaloneSignOff() {
+        // Nothing but the hallucination means there is no real speech to keep; deleting it would
+        // silently produce an empty transcript, so it is left for the user to discard.
+        #expect(TranscriptPostProcessor.clean("谢谢大家", preferredLanguage: .chinese) == "谢谢大家")
     }
 
     @Test
