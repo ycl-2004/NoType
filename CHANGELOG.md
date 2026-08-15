@@ -27,6 +27,7 @@ Release: [v0.3.0](https://github.com/ycl-2004/NoType/releases/tag/v0.3.0)
 
 - 104 tests passed across 8 suites.
 - Release ZIP, packaged icon, bundled model/tokenizer, whole-bundle signature, and SHA-256 checksum verified.
+- Release ZIP SHA-256: `9599c4fea1965dee27fc47940c6c8ff2db3ebd8bad1bf0e9a88ee8d6ce2d52e5`.
 
 ### Known limitations
 
