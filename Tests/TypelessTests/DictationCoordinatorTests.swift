@@ -23,6 +23,73 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func recordedClipIsDeletedAfterSuccessfulTranscription() async throws {
+        let appState = makeTestAppState()
+        let recorder = TempFileAudioRecorder()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: StubClipboardStore()
+        )
+        appState.update(for: .recording)
+        try await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        let clipURL = try #require(recorder.lastClipURL)
+        #expect(FileManager.default.fileExists(atPath: clipURL.path) == false)
+    }
+
+    @Test
+    func recordedClipIsDeletedWhenTranscriptionFails() async throws {
+        let appState = makeTestAppState()
+        let recorder = TempFileAudioRecorder()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: FailingTranscriptionEngine(),
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: StubClipboardStore()
+        )
+        appState.update(for: .recording)
+        try await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        let clipURL = try #require(recorder.lastClipURL)
+        #expect(FileManager.default.fileExists(atPath: clipURL.path) == false)
+        #expect(appState.lastError != nil)
+    }
+
+    @Test
+    func prepareForFirstDictationPrewarmsTheTranscriptionEngine() async {
+        let appState = makeTestAppState()
+        let engine = PrewarmCountingTranscriptionEngine()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: StubAudioRecorder(),
+            transcriptionEngine: engine,
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter()
+        )
+
+        await coordinator.prepareForFirstDictation()
+
+        #expect(engine.prewarmCallCount == 1)
+        #expect(appState.dictationState == .idle)
+    }
+
+    @Test
     func toggleFromRecordingReturnsToIdle() async {
         let appState = makeTestAppState()
         let recorder = StubAudioRecorder()
@@ -423,6 +490,57 @@ struct DictationCoordinatorTests {
 }
 
 @MainActor
+/// Writes a real file so tests can assert the clip is actually removed from disk.
+private final class TempFileAudioRecorder: AudioRecording, @unchecked Sendable {
+    private(set) var lastClipURL: URL?
+    private var started = false
+
+    func startRecording() async throws {
+        started = true
+    }
+
+    func stopRecording() async throws -> RecordedAudioClip {
+        guard started else {
+            throw AudioSessionError.missingOutputFile
+        }
+        started = false
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notype-test-\(UUID().uuidString)")
+            .appendingPathExtension("wav")
+        try Data("fake audio".utf8).write(to: url)
+        lastClipURL = url
+        return RecordedAudioClip(fileURL: url)
+    }
+}
+
+private struct FailingTranscriptionEngine: TranscriptionEngine {
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
+        throw TranscriptionError.failed("stub failure")
+    }
+}
+
+@MainActor
+private final class PrewarmCountingTranscriptionEngine: TranscriptionEngine {
+    private(set) var prewarmCallCount = 0
+
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
+        .init(text: "")
+    }
+
+    func prewarm() async {
+        prewarmCallCount += 1
+    }
+}
+
 private final class StubAudioRecorder: AudioRecording, @unchecked Sendable {
     private var started = false
 

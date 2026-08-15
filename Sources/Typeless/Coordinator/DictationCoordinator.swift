@@ -57,6 +57,15 @@ final class DictationCoordinator {
         self.clipboardStore = clipboardStore
     }
 
+    /// Loads the model in the background at launch so the first dictation does not pay for it.
+    func prepareForFirstDictation() async {
+        appState.setDebugMessage("Preloading transcription model")
+        AppLogger.log("prepareForFirstDictation: preloading transcription model")
+        await transcriptionEngine.prewarm()
+        appState.setDebugMessage("Transcription model ready")
+        AppLogger.log("prepareForFirstDictation: transcription model ready")
+    }
+
     func toggleDictation() async {
         AppLogger.log("toggleDictation called in state=\(String(describing: appState.dictationState))")
         switch appState.dictationState {
@@ -112,6 +121,8 @@ final class DictationCoordinator {
 
         do {
             let clip = try await audioRecorder.stopRecording()
+            // Runs on every exit from this scope, so a failed transcription cannot leak the audio.
+            defer { clip.deleteFile() }
             AppLogger.log("stopDictation: clip recorded at \(clip.fileURL.path)")
             let recognitionLanguage = appState.selectedRecognitionLanguage
             let chineseScriptPreference = appState.selectedChineseScriptPreference

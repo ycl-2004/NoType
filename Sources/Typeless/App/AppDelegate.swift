@@ -35,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshShortcutRegistration()
         NSApp.setActivationPolicy(.accessory)
+
+        AudioRecorder.removeOrphanedClips()
+        Task { [coordinator] in
+            await coordinator?.prepareForFirstDictation()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

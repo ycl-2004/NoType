@@ -33,6 +33,7 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
     }
 
     private var whisperKit: WhisperKit?
+    private var loadingTask: Task<WhisperKit, Error>?
     nonisolated static let mixedBaseLanguageCode = "zh"
     nonisolated static let mixedPromptText = """
     This is a multilingual transcription.
@@ -469,9 +470,25 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         return penalty
     }
 
+    func prewarm() async {
+        do {
+            _ = try await loadPipeline()
+        } catch {
+            // The next real dictation retries and reports the failure through the normal path.
+            AppLogger.log("WhisperKit: prewarm failed, model will load on first dictation instead: \(error)")
+        }
+    }
+
     private func loadPipeline() async throws -> WhisperKit {
         if let whisperKit {
             return whisperKit
+        }
+
+        // A dictation started while prewarming is still running must join that load, not start
+        // a second copy of a multi-gigabyte model.
+        if let loadingTask {
+            AppLogger.log("WhisperKit: joining in-flight model load")
+            return try await loadingTask.value
         }
 
         if let validationError = LocalWhisperPaths.validationError() {
@@ -491,7 +508,11 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
             download: false
         )
 
-        let pipeline = try await WhisperKit(config)
+        let task = Task { try await WhisperKit(config) }
+        loadingTask = task
+        defer { loadingTask = nil }
+
+        let pipeline = try await task.value
         whisperKit = pipeline
         AppLogger.log("WhisperKit: pipeline loaded successfully")
         return pipeline
