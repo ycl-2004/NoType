@@ -54,7 +54,7 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         let pipeline = try await loadPipeline()
         var attemptResults: [AttemptResult] = []
 
-        for attempt in Self.transcriptionAttempts(for: language) {
+        for (index, attempt) in Self.transcriptionAttempts(for: language).enumerated() {
             let options = Self.makeDecodingOptions(for: attempt, tokenizer: pipeline.tokenizer)
 
             AppLogger.log(
@@ -72,9 +72,15 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
             attemptResults.append(AttemptResult(attempt: attempt, text: result))
             AppLogger.log("WhisperKit: attempt \(String(describing: attempt.kind)) raw result: \(result)")
 
-            if Self.shouldRetryAfterTranscriptionResult(result) {
-                AppLogger.log("WhisperKit: empty transcription result, retrying next fallback if available")
+            if Self.canStopAfterAttempt(attempt, text: result, attemptIndex: index, preferredLanguage: language) {
+                AppLogger.log(
+                    "WhisperKit: attempt \(String(describing: attempt.kind)) is conclusive, " +
+                    "skipping \(Self.transcriptionAttempts(for: language).count - index - 1) remaining attempt(s)"
+                )
+                break
             }
+
+            AppLogger.log("WhisperKit: attempt \(String(describing: attempt.kind)) inconclusive, running next fallback if available")
         }
 
         if let bestResult = Self.selectBestTranscript(from: attemptResults, preferredLanguage: language),
@@ -183,6 +189,62 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
 
     nonisolated static func shouldRetryAfterTranscriptionResult(_ text: String) -> Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// `repeatedFragmentPenalty` scores 40 per adjacent repeat, so this threshold tolerates saying
+    /// the same word up to three times in a row and only treats longer runs as a decode loop.
+    nonisolated static let loopingHallucinationPenaltyThreshold = 120
+
+    /// Decides whether the attempt that just finished is conclusive enough to skip the remaining
+    /// fallbacks. Whisper's dominant failure mode is translating speech into English rather than
+    /// transcribing it, so an unexpected English-only result always earns one more attempt while a
+    /// result that already matches the requested language does not.
+    nonisolated static func canStopAfterAttempt(
+        _ attempt: TranscriptionAttempt,
+        text: String,
+        attemptIndex: Int,
+        preferredLanguage: DictationRecognitionLanguage
+    ) -> Bool {
+        guard !shouldRetryAfterTranscriptionResult(text) else {
+            return false
+        }
+
+        let features = analyzeTranscript(text, attempt: attempt, preferredLanguage: preferredLanguage)
+
+        // Only a long stutter looks like Whisper's looping hallucination. Saying a word twice or
+        // three times ("OK OK", "no no no") is ordinary speech and must not cost extra attempts.
+        guard repeatedFragmentPenalty(in: features.trimmedText) < loopingHallucinationPenaltyThreshold else {
+            return false
+        }
+
+        switch preferredLanguage {
+        case .chinese:
+            return features.hasCJK && englishDominantPenalty(
+                in: features.trimmedText,
+                latinCount: features.latinCount,
+                cjkCount: features.cjkCount
+            ) == 0
+        case .english:
+            return features.hasLatin && chineseDominantPenalty(
+                in: features.trimmedText,
+                latinCount: features.latinCount,
+                cjkCount: features.cjkCount
+            ) == 0
+        case .mixed:
+            // Code-switched output is exactly what mixed mode asks for.
+            if features.isMixed {
+                return true
+            }
+
+            // Chinese-only output is trustworthy: auto-detect does not translate Chinese into Chinese.
+            if features.hasCJK && !features.hasLatin {
+                return true
+            }
+
+            // English-only output may be a translation of Chinese speech. Let forced-Chinese verify
+            // it once; whichever way that comes back, a third attempt adds nothing.
+            return attemptIndex >= 1
+        }
     }
 
     nonisolated static func selectBestTranscript(

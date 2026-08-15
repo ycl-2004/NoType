@@ -105,6 +105,179 @@ struct TranscriptionEngineTests {
     }
 
     @Test
+    func chineseModeStopsAfterFirstForcedChineseAttempt() {
+        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+            text: "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說",
+            attemptIndex: 0,
+            preferredLanguage: .chinese
+        )
+
+        #expect(stop == true)
+    }
+
+    @Test
+    func chineseModeKeepsGoingWhenForcedChineseReturnsEnglishTranslation() {
+        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+            text: "I want to send a message to Amy in Slack and share the update with her",
+            attemptIndex: 0,
+            preferredLanguage: .chinese
+        )
+
+        #expect(stop == false)
+    }
+
+    @Test
+    func englishModeStopsAfterFirstForcedEnglishAttempt() {
+        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+            text: "Can you send Amy the update tomorrow",
+            attemptIndex: 0,
+            preferredLanguage: .english
+        )
+
+        #expect(stop == true)
+    }
+
+    @Test
+    func englishModeKeepsGoingWhenForcedEnglishReturnsChineseTranslation() {
+        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+            text: "你可以明天把更新發給她並且順便同步一下進度嗎",
+            attemptIndex: 0,
+            preferredLanguage: .english
+        )
+
+        #expect(stop == false)
+    }
+
+    @Test
+    func mixedModeStopsImmediatelyOnCodeSwitchedAutoDetectResult() {
+        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+            text: "我想在 Slack 发个 message 给 Amy about the Figma file",
+            attemptIndex: 0,
+            preferredLanguage: .mixed
+        )
+
+        #expect(stop == true)
+    }
+
+    @Test
+    func mixedModeStopsImmediatelyOnChineseOnlyAutoDetectResult() {
+        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+            text: "我明天想開會然後跟團隊同步一下進度",
+            attemptIndex: 0,
+            preferredLanguage: .mixed
+        )
+
+        #expect(stop == true)
+    }
+
+    @Test
+    func mixedModeVerifiesEnglishOnlyAutoDetectResultExactlyOnce() {
+        let englishOnly = "Can you send Amy the update tomorrow"
+
+        let stopAfterAutoDetect = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+            text: englishOnly,
+            attemptIndex: 0,
+            preferredLanguage: .mixed
+        )
+        let stopAfterForcedChinese = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+            text: "你可以明天把更新发给 Amy 吗",
+            attemptIndex: 1,
+            preferredLanguage: .mixed
+        )
+
+        #expect(stopAfterAutoDetect == false)
+        #expect(stopAfterForcedChinese == true)
+    }
+
+    @Test
+    func conversationalWordRepetitionStillStopsTheAttemptChain() {
+        // Observed in a real dictation: saying "OK OK" was treated as a decode loop and cost two
+        // extra attempts even though the transcript was already correct.
+        let repeatedTwice = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+            text: "OK OK 现在好吗",
+            attemptIndex: 0,
+            preferredLanguage: .chinese
+        )
+        let repeatedThreeTimes = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+            text: "no no no we ship tomorrow",
+            attemptIndex: 0,
+            preferredLanguage: .english
+        )
+
+        #expect(repeatedTwice == true)
+        #expect(repeatedThreeTimes == true)
+    }
+
+    @Test
+    func emptyOrLoopingResultNeverStopsTheAttemptChain() {
+        let empty = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+            text: "   \n\t",
+            attemptIndex: 0,
+            preferredLanguage: .chinese
+        )
+        let looping = WhisperKitTranscriptionEngine.canStopAfterAttempt(
+            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
+            text: "so so so so so we ship tomorrow",
+            attemptIndex: 0,
+            preferredLanguage: .english
+        )
+
+        #expect(empty == false)
+        #expect(looping == false)
+    }
+
+    @Test
+    func mixedModeVerificationPathStillSelectsTheFaithfulCandidate() {
+        // Only two attempts run once auto-detect returns English-only, so selection must reach the
+        // same verdict it previously reached with all three candidates present.
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "Can you send Amy the update tomorrow"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "你可以明天把更新发给 Amy 吗"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "Can you send Amy the update tomorrow")
+    }
+
+    @Test
+    func mixedModeVerificationPathRecoversTranslatedChineseSpeech() {
+        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
+            from: [
+                .init(
+                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
+                    text: "I want to schedule a meeting with Amy tomorrow"
+                ),
+                .init(
+                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
+                    text: "我明天想 schedule 一个 meeting 给 Amy"
+                )
+            ],
+            preferredLanguage: .mixed
+        )
+
+        #expect(selected?.text == "我明天想 schedule 一个 meeting 给 Amy")
+    }
+
+    @Test
     func mixedTranscriptScoringPrefersCodeSwitchedText() {
         let mixedScore = WhisperKitTranscriptionEngine.transcriptScore(
             "我想 schedule 一个 meeting tomorrow",
