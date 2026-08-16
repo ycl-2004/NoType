@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import WhisperKit
 
 @MainActor
-final class WhisperKitTranscriptionEngine: TranscriptionEngine {
+final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadinessReporting {
     struct TranscriptionAttempt: Equatable {
         let kind: AttemptKind
         let languageCode: String?
@@ -34,6 +34,7 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
 
     private var whisperKit: WhisperKit?
     private var loadingTask: Task<WhisperKit, Error>?
+    var onModelReadinessChange: ((LocalModelReadiness) -> Void)?
     nonisolated static let mixedBaseLanguageCode = "zh"
     nonisolated static let mixedPromptText = """
     This is a multilingual transcription.
@@ -481,6 +482,7 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
 
     private func loadPipeline() async throws -> WhisperKit {
         if let whisperKit {
+            onModelReadinessChange?(.ready)
             return whisperKit
         }
 
@@ -488,11 +490,20 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         // a second copy of a multi-gigabyte model.
         if let loadingTask {
             AppLogger.log("WhisperKit: joining in-flight model load")
-            return try await loadingTask.value
+            onModelReadinessChange?(.preparing)
+            do {
+                return try await loadingTask.value
+            } catch {
+                onModelReadinessChange?(.failed(Self.modelReadinessFailureMessage(for: error)))
+                throw error
+            }
         }
+
+        onModelReadinessChange?(.preparing)
 
         if let validationError = LocalWhisperPaths.validationError() {
             AppLogger.log("WhisperKit: model validation failed: \(validationError)")
+            onModelReadinessChange?(.failed(validationError))
             throw TranscriptionError.modelUnavailable(validationError)
         }
 
@@ -517,9 +528,26 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         loadingTask = task
         defer { loadingTask = nil }
 
-        let pipeline = try await task.value
-        whisperKit = pipeline
-        AppLogger.log("WhisperKit: pipeline loaded successfully")
-        return pipeline
+        do {
+            let pipeline = try await task.value
+            whisperKit = pipeline
+            onModelReadinessChange?(.ready)
+            AppLogger.log("WhisperKit: pipeline loaded successfully")
+            return pipeline
+        } catch {
+            onModelReadinessChange?(.failed(Self.modelReadinessFailureMessage(for: error)))
+            throw error
+        }
+    }
+
+    private nonisolated static func modelReadinessFailureMessage(for error: Error) -> String {
+        switch error {
+        case TranscriptionError.engineUnavailable:
+            "WhisperKit is unavailable."
+        case let TranscriptionError.modelUnavailable(message), let TranscriptionError.failed(message):
+            message
+        default:
+            error.localizedDescription
+        }
     }
 }

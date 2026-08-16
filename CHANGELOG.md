@@ -4,6 +4,10 @@ All notable user-facing changes to NoType are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- Added a live local-model status section to Diagnostics with Preparing, Ready, and Failed states, first-launch guidance, failure details, and retry support without requiring the debug log.
+
 ### Changed
 
 - Switched local and bundled WhisperKit builds to the `_turbo` Core ML package, which includes `TextDecoderContextPrefill` for faster decoder prefill while keeping transcription fully local.

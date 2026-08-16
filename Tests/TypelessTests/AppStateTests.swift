@@ -5,6 +5,20 @@ import Testing
 @MainActor
 struct AppStateTests {
     @Test
+    func localModelReadinessStartsWaitingAndPublishesChanges() {
+        let appState = AppState()
+        var changeCount = 0
+        appState.onChange = { changeCount += 1 }
+
+        #expect(appState.localModelReadiness == .waiting)
+
+        appState.setLocalModelReadiness(.preparing)
+
+        #expect(appState.localModelReadiness == .preparing)
+        #expect(changeCount == 1)
+    }
+
+    @Test
     func updatesStatusTextForRecordingState() {
         let appState = AppState()
 

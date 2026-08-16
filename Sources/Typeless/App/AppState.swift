@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     @Published var statusText = "Idle"
     @Published var lastTranscriptPreview: String?
     @Published var lastDebugMessage: String?
+    @Published private(set) var localModelReadiness: LocalModelReadiness = .waiting
     @Published var selectedRecognitionLanguage: DictationRecognitionLanguage {
         didSet {
             userDefaults.set(selectedRecognitionLanguage.rawValue, forKey: DefaultsKey.recognitionLanguage)
@@ -93,6 +94,12 @@ final class AppState: ObservableObject {
 
     func setDebugMessage(_ message: String) {
         lastDebugMessage = message
+        onChange?()
+    }
+
+    func setLocalModelReadiness(_ readiness: LocalModelReadiness) {
+        guard localModelReadiness != readiness else { return }
+        localModelReadiness = readiness
         onChange?()
     }
 

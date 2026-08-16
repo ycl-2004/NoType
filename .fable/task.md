@@ -1,38 +1,45 @@
-# Current Task: Ship WhisperKit Turbo Model Update
+# Current Task: Compare Local Models and Surface Model Readiness
 
 ## Goal
 
-Record, verify, install, commit, and push the current local WhisperKit `_turbo` model update, including its measured A/B result.
+Produce an auditable old-versus-Turbo model report and make the app's Diagnostics menu show the real local-model readiness state without requiring the debug log.
 
 ## Acceptance Criteria
 
-- The `_turbo` model path and prefill behavior are documented in the changelog and developer build instructions.
-- The A/B benchmark image is stored under `docs/benchmarks/` and referenced from the changelog.
-- The rebuilt `dist/NoType.app` and release archive contain the `_turbo` model package and `TextDecoderContextPrefill.mlmodelc`.
-- Swift tests and relevant package/bundle checks pass.
-- The verified current app is installed at `/Applications/NoType.app`.
-- Only the intended current changes are committed and pushed to the current GitHub branch.
+- A verified Excel workbook compares model structure, speed, memory, operational reliability, and disk footprint with native charts and formulas.
+- Old and Turbo performance measurements use the same input and disclose warm/cold-cache conditions.
+- Operational success rate is distinguished from transcript accuracy; WER/CER is reported only when reference text exists.
+- Related installed apps, release artifacts, local model copies, and identifiable Core ML caches are inventoried; only explicitly authorized stale temporary caches are deleted.
+- Diagnostics visibly distinguishes preparing, ready, and failed model states using the actual WhisperKit loading lifecycle.
+- Diagnostics provides useful first-launch guidance and an actionable failure message without requiring the debug log.
+- Automated tests and workbook inspection/rendering verify the deliverables.
 
 ## Requirements List (Append Only)
 
-1. Add the current `_turbo` model update to the changelog if appropriate.
-2. Move and commit `_Turbo_Model.png` as a documented benchmark result.
-3. Rebuild or verify the current `dist` version before installation.
-4. Install the current app to `/Applications/NoType.app`.
-5. Commit and push the current related changes.
+1. Create a complete comparison chart or Excel report for the current Turbo model versus the previous model.
+2. Compare model architecture and practical advantages.
+3. Run an A/B speed test and compare memory/resource behavior.
+4. Evaluate whether transcription succeeds reliably and report a success rate where measurable.
+5. Inspect project-related caches, previous app copies, and previous model copies consuming local disk space.
+6. Do not delete audited files or caches as part of the analysis.
+7. Add a Diagnostics section that shows whether the local model is preparing, ready, or failed without opening the debug log.
+8. Explain the long first launch visually and show a useful error state when model preparation fails.
+9. Delete only the stale interrupted Core ML temporary caches while preserving completed reusable caches.
 
 ## Decision Log
 
-- Store the benchmark at `docs/benchmarks/2026-08-16-turbo-model-ab.png` because it is a dated performance artifact, not a product asset.
-- Treat `_turbo` as one selectable local Whisper model pipeline with a `TextDecoderContextPrefill` helper, not as a second user-facing model choice.
-- Rebuild the release artifact because the existing `dist` archive still contains the previous non-`_turbo` model directory.
-- Do not open a pull request because the user requested commit and push, not PR creation.
+- Treat operational success rate and text accuracy as separate measurements; do not infer WER/CER without reference transcripts.
+- Use real pipeline lifecycle events for Diagnostics and avoid a fabricated percentage because Core ML does not expose reliable specialization progress.
+- Keep the model status inside the existing Diagnostics submenu so the normal menu remains compact.
+- Keep all disk-audit actions read-only; present cleanup candidates for later user authorization.
+- After explicit user authorization, remove only `.tmp.<old PID>.bundle` cache directories and retain completed `.bundle` caches.
+- Treat replacing the app bundle separately from a normal restart: the installed build created a new Core ML cache identity once, while the immediately following ordinary restart reused it.
 
 ## Evidence
 
-- `swift test`: 104 tests in 8 suites passed on 2026-08-16.
-- `./scripts/build_release.sh`: rebuilt `dist/NoType.app` and `NoType-0.3.0-arm64.zip` from the current checkout with the `_turbo` model package.
-- The rebuilt app is `0.3.0` build `3`, passes `codesign --verify --deep --strict`, and contains `TextDecoderContextPrefill.mlmodelc`.
-- The rebuilt archive checksum is `0706baa656d25c8f3c6872c73c90be361fd66ad631f3b80a8982ab5d5b9ff7a2`.
-- `/Applications/NoType.app` was replaced with the verified bundle and contains all four `_turbo` Core ML submodels.
-- Commit `97c8f75` was pushed successfully to `origin/main`.
+- Seven stale Core ML temporary bundles were verified against exited PIDs and deleted, reducing the NoType cache from 7,266,876 KiB to 561,440 KiB; cache files are rebuildable but the deleted temporary directories are not recoverable.
+- Installing the rebuilt app created eight new completed bundles and reached `WhisperKit: pipeline loaded successfully` after 118 seconds; a subsequent ordinary restart reached Ready in the same log second. Current cache: 704,712 KiB, 40 completed bundles, zero temporary bundles.
+- `swift test` passed 107 tests in 8 suites on 2026-08-16.
+- `scripts/build_release.sh` produced a signed NoType 0.3.0 app/archive; the installed binary SHA-256 matches the release binary and `codesign --verify --deep --strict` passed.
+- The workbook at `outputs/notype-model-analysis-20260816/NoType-Local-Model-Analysis-2026-08-16.xlsx` contains seven rendered sheets; inspection found zero formula errors and all sheets passed visual QA.
+- Diagnostics readiness and retry behavior are covered by AppState, coordinator, and menu lifecycle tests. Automated Computer Use could not attach to the windowless menu-bar agent, so no UI screenshot is claimed.

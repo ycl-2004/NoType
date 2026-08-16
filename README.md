@@ -45,6 +45,11 @@ download before your first dictation.
 Then focus any text field and double-tap **Command** to start. Double-tap it
 again to stop, transcribe, and insert the result.
 
+On the first launch, Core ML may need one or two minutes to specialize the
+bundled model for the Mac. Open **NoType → Diagnostics** to see **Local Model:
+Preparing**, **Ready**, or **Failed** without reading the debug log. Completed
+specialization is cached across normal app launches and Mac restarts.
+
 If Control-click → **Open** is unavailable, clear the quarantine flag:
 
 ```bash
@@ -76,6 +81,7 @@ open /Applications/NoType.app
 - Automatic five-minute recording limit prevents an abandoned session from running indefinitely.
 - Very short accidental recordings are ignored instead of being sent through transcription.
 - The transcription model is prepared in the background after launch to reduce first-use waiting.
+- Diagnostics shows whether the local model is preparing, ready, or failed and offers a retry when preparation cannot complete.
 
 **Recognition**
 
@@ -147,6 +153,19 @@ GitHub Release asset and is intentionally not committed to this repository.
 The current release is ad-hoc signed and not Apple-notarized. Control-click
 `NoType.app`, choose **Open**, and confirm once. You can also run the `xattr`
 command shown in [Quick start](#quick-start).
+
+</details>
+
+<details>
+<summary>Why can the first launch take a minute or two?</summary>
+
+The model is bundled, so NoType does not download anything. Core ML may still
+specialize the model for the current Mac the first time that model and compute
+configuration are used. NoType keeps running while this happens and shows the
+real state under **Diagnostics → Local Model**. Once Ready, the completed Core ML
+cache normally survives app launches and Mac restarts. An OS update, model
+change, app-bundle replacement, compute-configuration change, low-disk cleanup,
+or manual cache removal can require specialization again.
 
 </details>
 
@@ -274,6 +293,7 @@ before treating a build as a public, notarized release.
 - [Known issues](docs/known-issues.md) — understood limitations and future directions.
 - [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md) — why NoType uses curated shortcuts and modifier double-taps.
 - [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md) — why releases bundle the model instead of downloading it at runtime.
+- [ADR-003: Local model readiness](docs/decisions/003-local-model-readiness.md) — why Diagnostics reflects the actual Core ML loading lifecycle without a percentage.
 
 ## Third-party terms
 

@@ -2,7 +2,7 @@ import Foundation
 
 enum LocalWhisperPaths {
     static let expectedModelIdentifier = "large-v3"
-    /// The `_turbo` build ships the same Float16 weights as the plain folder plus a
+    /// The `_turbo` package uses its own optimized compiled model artifacts and adds a
     /// `TextDecoderContextPrefill` model, which lets WhisperKit look up the KV cache for the
     /// leading special tokens instead of decoding them one by one.
     private static let bundledModelFolderName = "openai_whisper-large-v3-v20240930_turbo"

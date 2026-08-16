@@ -273,6 +273,48 @@ final class MenuBarController: NSObject {
     func diagnosticsMenu() -> NSMenu {
         let menu = NSMenu()
 
+        let readiness = appState.localModelReadiness
+        let modelStatusItem = NSMenuItem(
+            title: "Local Model: \(readiness.menuTitle)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        modelStatusItem.isEnabled = false
+        modelStatusItem.image = NSImage(
+            systemSymbolName: readiness.symbolName,
+            accessibilityDescription: "Local model \(readiness.menuTitle)"
+        )
+        menu.addItem(modelStatusItem)
+
+        let readinessDetailItem = NSMenuItem(title: readiness.detailText, action: nil, keyEquivalent: "")
+        readinessDetailItem.isEnabled = false
+        readinessDetailItem.indentationLevel = 1
+        menu.addItem(readinessDetailItem)
+
+        if let reason = readiness.failureReason {
+            let oneLineReason = reason.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            let isTruncated = oneLineReason.count > 110
+            let reasonItem = NSMenuItem(
+                title: "Reason: \(oneLineReason.prefix(110))\(isTruncated ? "…" : "")",
+                action: nil,
+                keyEquivalent: ""
+            )
+            reasonItem.isEnabled = false
+            reasonItem.indentationLevel = 1
+            reasonItem.toolTip = reason
+            menu.addItem(reasonItem)
+
+            let retryItem = NSMenuItem(
+                title: "Retry Model Preparation",
+                action: #selector(handleRetryModelPreparation),
+                keyEquivalent: ""
+            )
+            retryItem.target = self
+            menu.addItem(retryItem)
+        }
+
+        menu.addItem(.separator())
+
         if let lastDebugMessage = appState.lastDebugMessage {
             let debugItem = NSMenuItem(title: "Last Event: \(lastDebugMessage)", action: nil, keyEquivalent: "")
             debugItem.isEnabled = false
@@ -293,6 +335,13 @@ final class MenuBarController: NSObject {
         menu.addItem(logPathItem)
 
         return menu
+    }
+
+    @objc
+    private func handleRetryModelPreparation() {
+        Task { [coordinator] in
+            await coordinator.prepareForFirstDictation()
+        }
     }
 
     @objc

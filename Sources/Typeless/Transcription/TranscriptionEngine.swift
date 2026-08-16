@@ -11,6 +11,11 @@ protocol TranscriptionEngine {
     func prewarm() async
 }
 
+@MainActor
+protocol LocalModelReadinessReporting: AnyObject {
+    var onModelReadinessChange: ((LocalModelReadiness) -> Void)? { get set }
+}
+
 extension TranscriptionEngine {
     func prewarm() async {}
 }

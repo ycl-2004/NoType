@@ -193,6 +193,22 @@ struct DictationCoordinatorTests {
 
         #expect(engine.prewarmCallCount == 1)
         #expect(appState.dictationState == .idle)
+        #expect(appState.localModelReadiness == .ready)
+    }
+
+    @Test
+    func failedModelPreparationRemainsVisibleInAppState() async {
+        let appState = makeTestAppState()
+        let engine = FailingPrewarmTranscriptionEngine(reason: "Model package is missing")
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            transcriptionEngine: engine
+        )
+
+        await coordinator.prepareForFirstDictation()
+
+        #expect(appState.localModelReadiness == .failed("Model package is missing"))
+        #expect(appState.lastDebugMessage == "Transcription model preparation failed")
     }
 
     @Test
@@ -684,6 +700,28 @@ private final class PrewarmCountingTranscriptionEngine: TranscriptionEngine {
 
     func prewarm() async {
         prewarmCallCount += 1
+    }
+}
+
+@MainActor
+private final class FailingPrewarmTranscriptionEngine: TranscriptionEngine, LocalModelReadinessReporting {
+    let reason: String
+    var onModelReadinessChange: ((LocalModelReadiness) -> Void)?
+
+    init(reason: String) {
+        self.reason = reason
+    }
+
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
+        throw TranscriptionError.modelUnavailable(reason)
+    }
+
+    func prewarm() async {
+        onModelReadinessChange?(.failed(reason))
     }
 }
 

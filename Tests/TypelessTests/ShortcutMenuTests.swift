@@ -51,6 +51,28 @@ struct ShortcutMenuTests {
         #expect(mainTitles.contains("Diagnostics"))
         #expect(controller.diagnosticsMenu().items.contains { $0.title == "Last Event: Recorder started" })
     }
+
+    @Test
+    func diagnosticsShowsRealLocalModelLifecycleWithoutOpeningTheLog() {
+        let appState = makeShortcutMenuAppState()
+        let controller = MenuBarController(appState: appState, coordinator: DictationCoordinator(appState: appState))
+
+        appState.setLocalModelReadiness(.preparing)
+        var titles = controller.diagnosticsMenu().items.map(\.title)
+        #expect(titles.contains("Local Model: Preparing…"))
+        #expect(titles.contains { $0.contains("First preparation can take 1–2 minutes") })
+
+        appState.setLocalModelReadiness(.ready)
+        titles = controller.diagnosticsMenu().items.map(\.title)
+        #expect(titles.contains("Local Model: Ready"))
+        #expect(titles.contains { $0.contains("Cached launches should be much faster") })
+
+        appState.setLocalModelReadiness(.failed("Required model is missing"))
+        titles = controller.diagnosticsMenu().items.map(\.title)
+        #expect(titles.contains("Local Model: Failed"))
+        #expect(titles.contains("Reason: Required model is missing"))
+        #expect(titles.contains("Retry Model Preparation"))
+    }
 }
 
 @MainActor

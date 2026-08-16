@@ -63,15 +63,37 @@ final class DictationCoordinator {
         self.focusedTextInserter = focusedTextInserter
         self.fallbackTextInserter = fallbackTextInserter
         self.clipboardStore = clipboardStore
+
+        if let readinessReporter = transcriptionEngine as? LocalModelReadinessReporting {
+            readinessReporter.onModelReadinessChange = { [weak appState] readiness in
+                appState?.setLocalModelReadiness(readiness)
+            }
+        }
     }
 
     /// Loads the model in the background at launch so the first dictation does not pay for it.
     func prepareForFirstDictation() async {
+        appState.setLocalModelReadiness(.preparing)
         appState.setDebugMessage("Preloading transcription model")
         AppLogger.log("prepareForFirstDictation: preloading transcription model")
         await transcriptionEngine.prewarm()
-        appState.setDebugMessage("Transcription model ready")
-        AppLogger.log("prepareForFirstDictation: transcription model ready")
+
+        // Simple test or alternate engines do not report their own lifecycle. Reaching this point
+        // still means their best-effort prewarm completed, so finish the state transition for them.
+        if appState.localModelReadiness == .preparing {
+            appState.setLocalModelReadiness(.ready)
+        }
+
+        switch appState.localModelReadiness {
+        case .ready:
+            appState.setDebugMessage("Transcription model ready")
+            AppLogger.log("prepareForFirstDictation: transcription model ready")
+        case let .failed(reason):
+            appState.setDebugMessage("Transcription model preparation failed")
+            AppLogger.log("prepareForFirstDictation: transcription model preparation failed: \(reason)")
+        case .waiting, .preparing:
+            break
+        }
     }
 
     func toggleDictation() async {
