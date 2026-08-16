@@ -30,4 +30,9 @@ Record, verify, install, commit, and push the current local WhisperKit `_turbo` 
 
 ## Evidence
 
-- Pending: current diff review, tests, rebuilt bundle/archive, installation, commit, and push.
+- `swift test`: 104 tests in 8 suites passed on 2026-08-16.
+- `./scripts/build_release.sh`: rebuilt `dist/NoType.app` and `NoType-0.3.0-arm64.zip` from the current checkout with the `_turbo` model package.
+- The rebuilt app is `0.3.0` build `3`, passes `codesign --verify --deep --strict`, and contains `TextDecoderContextPrefill.mlmodelc`.
+- The rebuilt archive checksum is `0706baa656d25c8f3c6872c73c90be361fd66ad631f3b80a8982ab5d5b9ff7a2`.
+- `/Applications/NoType.app` was replaced with the verified bundle and contains all four `_turbo` Core ML submodels.
+- Commit `97c8f75` was pushed successfully to `origin/main`.
