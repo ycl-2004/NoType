@@ -499,6 +499,11 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine {
         AppLogger.log(
             "WhisperKit: loading validated local model \(LocalWhisperPaths.expectedModelIdentifier) from \(LocalWhisperPaths.modelFolder)"
         )
+        if !LocalWhisperPaths.hasContextPrefill {
+            AppLogger.log(
+                "WhisperKit: TextDecoderContextPrefill is missing, prefill tokens will be decoded one by one"
+            )
+        }
         let config = WhisperKitConfig(
             modelFolder: LocalWhisperPaths.modelFolder,
             tokenizerFolder: LocalWhisperPaths.tokenizerBaseFolder,

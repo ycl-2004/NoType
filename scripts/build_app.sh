@@ -18,7 +18,7 @@ APP_ICONSET_DIR="$ASSET_CATALOG_DIR/AppIcon.appiconset"
 APP_ICON_MANIFEST="$ROOT_DIR/Packaging/AppIconContents.json"
 APP_ICON_PARTIAL_PLIST="$ROOT_DIR/.build/AppIcon-PartialInfo.plist"
 INCLUDE_MODEL="${INCLUDE_MODEL:-0}"
-WHISPER_MODEL_DIR="${WHISPER_MODEL_DIR:-/Users/yichenlin/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930}"
+WHISPER_MODEL_DIR="${WHISPER_MODEL_DIR:-/Users/yichenlin/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930_turbo}"
 WHISPER_TOKENIZER_DIR="${WHISPER_TOKENIZER_DIR:-/Users/yichenlin/Documents/huggingface/models/openai/whisper-large-v3}"
 
 for candidate in "App_icon.png" "App_Icon.png"; do

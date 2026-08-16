@@ -2,6 +2,17 @@
 
 All notable user-facing changes to NoType are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- Switched local and bundled WhisperKit builds to the `_turbo` Core ML package, which includes `TextDecoderContextPrefill` for faster decoder prefill while keeping transcription fully local.
+- Updated the build scripts and developer model path to use the same `_turbo` package consistently.
+
+### Performance
+
+- A seven-run alternating local A/B benchmark measured median `fullPipeline` time at `0.515s` for `_turbo` versus `0.828s` for the previous package (`-38%`), with encoding improving from `0.638s` to `0.345s` (`-46%`). See [the benchmark result](docs/benchmarks/2026-08-16-turbo-model-ab.png).
+
 ## [0.3.0] - 2026-08-14
 
 Release: [v0.3.0](https://github.com/ycl-2004/NoType/releases/tag/v0.3.0)

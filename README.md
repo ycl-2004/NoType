@@ -153,9 +153,11 @@ command shown in [Quick start](#quick-start).
 <details>
 <summary>Why is the download so large?</summary>
 
-NoType includes the Whisper `large-v3` Core ML model and its tokenizer. This
-makes the archive much larger, but it also means transcription works locally on
-first launch without downloading a model or sending speech to a server.
+NoType includes the Whisper `large-v3` `_turbo` Core ML package and its tokenizer.
+The package includes an optional decoder-prefill model that reduces startup
+decoding work. This makes the archive much larger, but it also means
+transcription works locally on first launch without downloading a model or
+sending speech to a server.
 
 </details>
 
@@ -218,7 +220,7 @@ fallback paths configured in `LocalWhisperPaths.swift`.
 Build the self-contained release archive:
 
 ```bash
-WHISPER_MODEL_DIR="/path/to/openai_whisper-large-v3-v20240930" \
+WHISPER_MODEL_DIR="/path/to/openai_whisper-large-v3-v20240930_turbo" \
 WHISPER_TOKENIZER_DIR="/path/to/whisper-large-v3" \
 ./scripts/build_release.sh
 ```
