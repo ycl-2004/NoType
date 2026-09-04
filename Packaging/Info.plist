@@ -28,5 +28,7 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>NoType needs microphone access to record your speech for dictation.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>NoType uses the on-device speech recognizer built into macOS to turn your recording into text. Nothing is sent off your Mac.</string>
 </dict>
 </plist>

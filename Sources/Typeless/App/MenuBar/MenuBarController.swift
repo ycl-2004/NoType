@@ -51,6 +51,14 @@ final class MenuBarController: NSObject {
         languageMenuItem.submenu = recognitionLanguageMenu()
         menu.addItem(languageMenuItem)
 
+        let engineMenuItem = NSMenuItem(
+            title: "Engine: \(engineMenuSummary)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        engineMenuItem.submenu = transcriptionEngineMenu()
+        menu.addItem(engineMenuItem)
+
         let chineseScriptMenuItem = NSMenuItem(
             title: "Chinese Script: \(appState.selectedChineseScriptPreference.menuTitle)",
             action: nil,
@@ -144,6 +152,42 @@ final class MenuBarController: NSObject {
             item.state = appState.selectedRecognitionLanguage == language ? .on : .off
             menu.addItem(item)
         }
+
+        return menu
+    }
+
+    /// Auto silently routes to Whisper whatever the user picked, so the menu says so rather than
+    /// showing a preference the current recognition mode is not honouring.
+    private var engineMenuSummary: String {
+        let selected = appState.selectedTranscriptionEngine
+        let effective = selected.resolvedEngine(for: appState.selectedRecognitionLanguage)
+        guard effective != selected else { return selected.menuTitle }
+        return "\(selected.menuTitle) → \(effective.menuTitle)"
+    }
+
+    func transcriptionEngineMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        for engine in TranscriptionEngineChoice.allCases {
+            let item = NSMenuItem(
+                title: engine.menuTitle,
+                action: #selector(handleTranscriptionEngineSelection(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = engine.rawValue
+            item.state = appState.selectedTranscriptionEngine == engine ? .on : .off
+            // Offering macOS Speech on a system without it would be a setting that does nothing.
+            item.isEnabled = engine != .appleSpeech || TranscriptionEngineChoice.isAppleSpeechAvailable
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+
+        let note = TranscriptionEngineChoice.isAppleSpeechAvailable
+            ? "Auto → Whisper"
+            : "Needs macOS 26"
+        menu.addItem(NSMenuItem(title: note, action: nil, keyEquivalent: ""))
 
         return menu
     }
@@ -360,6 +404,16 @@ final class MenuBarController: NSObject {
 
         appState.setRecognitionLanguage(language)
         appState.setDebugMessage("Recognition language set to \(language.statusDescription)")
+    }
+
+    @objc
+    private func handleTranscriptionEngineSelection(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let engine = TranscriptionEngineChoice(rawValue: rawValue) else {
+            return
+        }
+
+        appState.setTranscriptionEngine(engine)
     }
 
     @objc

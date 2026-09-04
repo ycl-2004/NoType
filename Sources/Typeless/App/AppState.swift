@@ -6,6 +6,7 @@ final class AppState: ObservableObject {
         static let recognitionLanguage = "recognitionLanguage"
         static let chineseScriptPreference = "chineseScriptPreference"
         static let successStatusMode = "successStatusMode"
+        static let transcriptionEngine = "transcriptionEngine"
         static let dictationShortcutChoice = "dictationShortcutChoice"
         static let recognitionModeShortcutChoice = "recognitionModeShortcutChoice"
         static let dictationShortcutEnabled = "dictationShortcutEnabled"
@@ -29,6 +30,12 @@ final class AppState: ObservableObject {
     @Published var selectedChineseScriptPreference: ChineseScriptPreference {
         didSet {
             userDefaults.set(selectedChineseScriptPreference.rawValue, forKey: DefaultsKey.chineseScriptPreference)
+            onChange?()
+        }
+    }
+    @Published var selectedTranscriptionEngine: TranscriptionEngineChoice {
+        didSet {
+            userDefaults.set(selectedTranscriptionEngine.rawValue, forKey: DefaultsKey.transcriptionEngine)
             onChange?()
         }
     }
@@ -58,6 +65,7 @@ final class AppState: ObservableObject {
         selectedRecognitionLanguage = DictationRecognitionLanguage(rawValue: savedValue ?? "") ?? .mixed
         let savedChineseScriptPreference = userDefaults.string(forKey: DefaultsKey.chineseScriptPreference)
         selectedChineseScriptPreference = ChineseScriptPreference(rawValue: savedChineseScriptPreference ?? "") ?? .followModel
+        selectedTranscriptionEngine = Self.loadTranscriptionEngine(from: userDefaults)
         let savedSuccessStatus = userDefaults.string(forKey: DefaultsKey.successStatusMode)
         selectedSuccessStatusMode = DictationSuccessStatusMode(rawValue: savedSuccessStatus ?? "") ?? .both
         selectedDictationShortcut = Self.loadDictationShortcut(from: userDefaults)
@@ -113,6 +121,11 @@ final class AppState: ObservableObject {
         selectedChineseScriptPreference = preference
     }
 
+    func setTranscriptionEngine(_ engine: TranscriptionEngineChoice) {
+        guard selectedTranscriptionEngine != engine else { return }
+        selectedTranscriptionEngine = engine
+    }
+
     func setSuccessStatusMode(_ mode: DictationSuccessStatusMode) {
         guard selectedSuccessStatusMode != mode else { return }
         selectedSuccessStatusMode = mode
@@ -126,6 +139,20 @@ final class AppState: ObservableObject {
     func setRecognitionModeShortcut(_ shortcut: RecognitionModeShortcutChoice) {
         guard selectedRecognitionModeShortcut != shortcut else { return }
         selectedRecognitionModeShortcut = shortcut
+    }
+
+    /// A saved preference for macOS Speech is ignored on a Mac that cannot run it, so moving a
+    /// settings file to an older system degrades to the bundled model instead of failing.
+    private static func loadTranscriptionEngine(from userDefaults: UserDefaults) -> TranscriptionEngineChoice {
+        guard let rawValue = userDefaults.string(forKey: DefaultsKey.transcriptionEngine),
+              let saved = TranscriptionEngineChoice(rawValue: rawValue) else {
+            return .defaultChoice
+        }
+
+        if saved == .appleSpeech, TranscriptionEngineChoice.isAppleSpeechAvailable == false {
+            return .bundledWhisper
+        }
+        return saved
     }
 
     private static func loadDictationShortcut(from userDefaults: UserDefaults) -> DictationShortcutChoice {

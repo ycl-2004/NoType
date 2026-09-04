@@ -45,12 +45,20 @@ final class DictationCoordinator {
     private var targetInput: FocusedInputTarget?
     private var recordingTimeoutTask: Task<Void, Never>?
 
+    /// `startDictation` awaits a microphone permission check, and the state stays `.idle` for that
+    /// whole window. A second shortcut press during it used to start a second session: the first
+    /// one began recording and the second failed with `alreadyRecording`, overwriting the running
+    /// session's state with an error. The recorder kept running while the menu bar insisted no
+    /// audio had been captured, and every further press restarted instead of stopping — the app
+    /// could not be recovered without a relaunch.
+    private var isHandlingToggle = false
+
     init(
         appState: AppState,
         microphonePermissionManager: MicrophonePermissionManaging = MicrophonePermissionManager(),
         accessibilityPermissionManager: AccessibilityPermissionManaging = AccessibilityPermissionManager(),
         audioRecorder: AudioRecording = AudioRecorder(),
-        transcriptionEngine: TranscriptionEngine = WhisperKitTranscriptionEngine(),
+        transcriptionEngine: TranscriptionEngine? = nil,
         focusedTextInserter: FocusedTextInserter = AccessibilityTextInserter(),
         fallbackTextInserter: FallbackTextInserter = ClipboardPasteFallback(),
         clipboardStore: ClipboardStoring = ClipboardStore()
@@ -59,12 +67,15 @@ final class DictationCoordinator {
         self.microphonePermissionManager = microphonePermissionManager
         self.accessibilityPermissionManager = accessibilityPermissionManager
         self.audioRecorder = audioRecorder
-        self.transcriptionEngine = transcriptionEngine
+        // Built here rather than as a default argument because it needs `appState`, which a
+        // default argument cannot reference.
+        let resolvedEngine = transcriptionEngine ?? RoutingTranscriptionEngine(appState: appState)
+        self.transcriptionEngine = resolvedEngine
         self.focusedTextInserter = focusedTextInserter
         self.fallbackTextInserter = fallbackTextInserter
         self.clipboardStore = clipboardStore
 
-        if let readinessReporter = transcriptionEngine as? LocalModelReadinessReporting {
+        if let readinessReporter = resolvedEngine as? LocalModelReadinessReporting {
             readinessReporter.onModelReadinessChange = { [weak appState] readiness in
                 appState?.setLocalModelReadiness(readiness)
             }
@@ -97,6 +108,13 @@ final class DictationCoordinator {
     }
 
     func toggleDictation() async {
+        guard isHandlingToggle == false else {
+            AppLogger.log("toggleDictation ignored: a start or stop is already in flight")
+            return
+        }
+        isHandlingToggle = true
+        defer { isHandlingToggle = false }
+
         AppLogger.log("toggleDictation called in state=\(String(describing: appState.dictationState))")
         switch appState.dictationState {
         case .idle, .error:
@@ -134,6 +152,16 @@ final class DictationCoordinator {
             appState.setDebugMessage("Recorder started")
             AppLogger.log("startDictation: recorder started")
             startRecordingTimeout()
+        } catch AudioSessionError.alreadyRecording {
+            // A recorder left running by an earlier failed transition would otherwise reject every
+            // future dictation. Discard it and report a state the user can act on.
+            AppLogger.log("startDictation: recorder was already running, discarding the stale session")
+            if let staleClip = try? await audioRecorder.stopRecording() {
+                staleClip.deleteFile()
+            }
+            appState.update(for: .idle)
+            appState.statusText = "Ready — press again to dictate"
+            appState.setDebugMessage("Discarded a stale recording session; ready to start again")
         } catch AudioSessionError.invalidInputFormat {
             appState.setError(.invalidAudioInput)
             appState.setDebugMessage("Invalid audio input format")
@@ -197,7 +225,7 @@ final class DictationCoordinator {
             }
             let recognitionLanguage = appState.selectedRecognitionLanguage
             let chineseScriptPreference = appState.selectedChineseScriptPreference
-            appState.setDebugMessage("Running WhisperKit (\(recognitionLanguage.statusDescription))")
+            appState.setDebugMessage("Transcribing (\(recognitionLanguage.statusDescription))")
             let transcript = try await transcriptionEngine.transcribe(
                 clip,
                 language: recognitionLanguage,

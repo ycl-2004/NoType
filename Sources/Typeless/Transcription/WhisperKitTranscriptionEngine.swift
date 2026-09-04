@@ -34,7 +34,12 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
 
     private var whisperKit: WhisperKit?
     private var loadingTask: Task<WhisperKit, Error>?
+    private let modelInstaller: WhisperModelInstalling
     var onModelReadinessChange: ((LocalModelReadiness) -> Void)?
+
+    init(modelInstaller: WhisperModelInstalling = WhisperModelInstaller()) {
+        self.modelInstaller = modelInstaller
+    }
     nonisolated static let mixedBaseLanguageCode = "zh"
     nonisolated static let mixedPromptText = """
     This is a multilingual transcription.
@@ -500,6 +505,29 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
         }
 
         onModelReadinessChange?(.preparing)
+
+        // A missing model is recoverable: the lightweight build ships without one on purpose, so
+        // offer to fetch it rather than dead-ending on an error the user cannot act on.
+        if LocalWhisperPaths.modelFolderExists == false {
+            AppLogger.log("WhisperKit: no model found in \(LocalWhisperPaths.searchedModelFolders.count) searched location(s)")
+            do {
+                guard try await modelInstaller.installIfNeeded(progress: { [weak self] message in
+                    self?.onModelReadinessChange?(.preparing)
+                    AppLogger.log("WhisperKit: \(message)")
+                }) != nil else {
+                    let declined = "The speech model is not installed. Choose Retry Model Preparation to download it."
+                    onModelReadinessChange?(.failed(declined))
+                    throw TranscriptionError.modelUnavailable(declined)
+                }
+            } catch let error as TranscriptionError {
+                throw error
+            } catch {
+                let message = "Could not download the speech model: \(error.localizedDescription)"
+                AppLogger.log("WhisperKit: \(message)")
+                onModelReadinessChange?(.failed(message))
+                throw TranscriptionError.modelUnavailable(message)
+            }
+        }
 
         if let validationError = LocalWhisperPaths.validationError() {
             AppLogger.log("WhisperKit: model validation failed: \(validationError)")

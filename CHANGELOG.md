@@ -6,15 +6,27 @@ All notable user-facing changes to NoType are recorded here.
 
 ### Added
 
+- Added transcription through the on-device speech engine built into macOS 26, selectable as **Engine → macOS Speech (fast)** in the menu bar. It does not translate, does not emit subtitle sign-off hallucinations, and returns a transcript far sooner than the bundled model. Like the bundled model, it runs entirely on the Mac.
+- Added an engine choice that persists across launches. **Auto (中英混说) always uses Whisper** whichever engine is selected, because only Whisper detects the spoken language; the menu shows this as `Engine: macOS Speech (fast) → Bundled Whisper` when it applies. See [ADR-004](docs/decisions/004-two-engine-routing.md).
+- Added a prompt asking where to install the Whisper model when no copy is found, offering a shared folder (`~/Documents/huggingface`, reused by other WhisperKit apps) or a private one (`~/Library/Application Support/NoType`, removed with the app). Nothing is downloaded until the location is chosen. See [ADR-005](docs/decisions/005-model-location-strategy.md).
 - Added a live local-model status section to Diagnostics with Preparing, Ready, and Failed states, first-launch guidance, failure details, and retry support without requiring the debug log.
 
 ### Changed
 
+- The Whisper model is now resolved from an install location before the copy inside the app, and the location is derived from the current user's home directory instead of a hardcoded path. Replacing the app no longer moves the model path, which is what previously discarded the Core ML specialization cache.
 - Switched local and bundled WhisperKit builds to the `_turbo` Core ML package, which includes `TextDecoderContextPrefill` for faster decoder prefill while keeping transcription fully local.
 - Updated the build scripts and developer model path to use the same `_turbo` package consistently.
 
+### Fixed
+
+- Fixed a lockout where pressing the dictation shortcut a second time while the microphone permission check was still running started a second session. The first began recording and the second failed, overwriting the running session's state with an error, after which every press restarted instead of stopping — the recorder kept running while the menu bar reported "No audio captured", and only relaunching recovered it. A recorder left running by any earlier failure is now discarded instead of blocking every later dictation.
+- Fixed a crash the first time macOS asked for Speech Recognition permission.
+- Starting a recording and then not speaking now ends the session quietly instead of reporting an error, matching how the bundled model already handled silence.
+
 ### Performance
 
+- Loading the Whisper model after an app update no longer re-runs Core ML specialization: measured at 4m13s before, and 2–4s after, on the same Mac and model.
+- Single-language dictation through the macOS Speech engine returned a final transcript 0.083s after speech ended on a 10.6s Chinese clip, against roughly 1s for the bundled model.
 - A seven-run alternating local A/B benchmark measured median `fullPipeline` time at `0.515s` for `_turbo` versus `0.828s` for the previous package (`-38%`), with encoding improving from `0.638s` to `0.345s` (`-46%`). See [the benchmark result](docs/benchmarks/2026-08-16-turbo-model-ab.png).
 
 ## [0.3.0] - 2026-08-14

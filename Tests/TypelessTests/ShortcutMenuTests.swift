@@ -60,12 +60,12 @@ struct ShortcutMenuTests {
         appState.setLocalModelReadiness(.preparing)
         var titles = controller.diagnosticsMenu().items.map(\.title)
         #expect(titles.contains("Local Model: Preparing…"))
-        #expect(titles.contains { $0.contains("First preparation can take 1–2 minutes") })
+        #expect(titles.contains { $0.contains("Preparing the speech model") })
 
         appState.setLocalModelReadiness(.ready)
         titles = controller.diagnosticsMenu().items.map(\.title)
         #expect(titles.contains("Local Model: Ready"))
-        #expect(titles.contains { $0.contains("Cached launches should be much faster") })
+        #expect(titles.contains { $0.contains("loaded and ready") })
 
         appState.setLocalModelReadiness(.failed("Required model is missing"))
         titles = controller.diagnosticsMenu().items.map(\.title)

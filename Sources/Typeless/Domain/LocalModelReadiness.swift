@@ -22,9 +22,9 @@ enum LocalModelReadiness: Equatable {
         case .waiting:
             "Preparation starts automatically after launch."
         case .preparing:
-            "First preparation can take 1–2 minutes. Keep NoType open."
+            "Preparing the speech model. The first run may download it or specialize it."
         case .ready:
-            "Turbo is loaded. Cached launches should be much faster."
+            "The speech model is loaded and ready."
         case .failed:
             "Preparation did not complete. Retry or inspect the debug log."
         }
