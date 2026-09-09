@@ -22,6 +22,11 @@ protocol FocusedTextInserter {
     func captureTarget() -> FocusedInputTarget?
     func insert(_ text: String) throws
     func insert(_ text: String, into target: FocusedInputTarget) throws
+    func canPaste(into target: FocusedInputTarget) -> Bool
+}
+
+extension FocusedTextInserter {
+    func canPaste(into target: FocusedInputTarget) -> Bool { false }
 }
 
 @MainActor

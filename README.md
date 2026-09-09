@@ -123,7 +123,7 @@ open /Applications/NoType.app
 **Text delivery**
 
 - Insert and copy, insert only, or copy only after a successful transcription.
-- Direct Accessibility insertion with a paste fallback for apps that do not expose a compatible text field.
+- Direct Accessibility insertion with a paste fallback for apps that do not expose a compatible text field. Terminal, Ghostty, and iTerm2 use paste into the original focused terminal; changing tabs or fields prevents fallback into a different target.
 - Captured-target protection prevents a completed transcript from landing in a different chat or document.
 - Clipboard-preserving fallback when insert-only mode needs to simulate a paste.
 
@@ -132,7 +132,7 @@ open /Applications/NoType.app
 - Live idle, recording, transcribing, inserting, and error states.
 - Recognition and Chinese-script markers visible in the menu-bar icon.
 - Configurable dictation and recognition-mode shortcuts that persist across launches.
-- Permission status, the latest diagnostic event, and direct access to the local debug log.
+- Permission status, the latest diagnostic event, and direct access to the local debug log. Logs retain the newest five days and are trimmed whenever NoType logs activity or accesses the log.
 
 ## Usage
 

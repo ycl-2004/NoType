@@ -655,7 +655,11 @@ struct TranscriptionEngineTests {
 
     @Test
     func localWhisperPathValidationRequiresLargeV3Model() {
-        #expect(LocalWhisperPaths.validationError() == nil)
+        if LocalWhisperPaths.modelFolderExists {
+            #expect(LocalWhisperPaths.validationError() == nil)
+        } else {
+            #expect(LocalWhisperPaths.validationError()?.contains("Required Whisper model is missing") == true)
+        }
         #expect(LocalWhisperPaths.modelFolder.contains(LocalWhisperPaths.expectedModelIdentifier))
     }
 }

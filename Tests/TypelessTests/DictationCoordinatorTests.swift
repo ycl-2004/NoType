@@ -423,6 +423,34 @@ struct DictationCoordinatorTests {
         #expect(appState.statusText == "Original chat changed, transcript copied")
     }
 
+    @Test(arguments: [DictationSuccessStatusMode.both, .transcriptInserted])
+    func unchangedCapturedTerminalUsesPaste(mode: DictationSuccessStatusMode) async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(mode)
+        let recorder = StubAudioRecorder()
+        let fallback = StubFallbackInserter()
+        let inserter = RecordingFocusedTextInserter(
+            capturedTarget: FocusedInputTarget(element: nil, debugDescription: "terminal"),
+            failCapturedInsert: true,
+            pasteAllowed: true
+        )
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: inserter,
+            fallbackTextInserter: fallback,
+            clipboardStore: StubClipboardStore()
+        )
+        await coordinator.toggleDictation()
+        await coordinator.toggleDictation()
+        #expect(fallback.pastedText == "Hello 你好")
+        #expect(fallback.preserveClipboard == (mode == .transcriptInserted))
+        #expect(inserter.insertedText == nil)
+    }
+
     @Test
     func insertOnlyModeCopiesTranscriptWhenCapturedTargetChanges() async {
         let appState = makeTestAppState()
@@ -809,18 +837,23 @@ private final class RecordingFocusedTextInserter: FocusedTextInserter {
     private(set) var insertedIntoCapturedTargetText: String?
     private let capturedTarget: FocusedInputTarget?
     private let failCapturedInsert: Bool
+    private let pasteAllowed: Bool
 
     init(
         capturedTarget: FocusedInputTarget? = nil,
-        failCapturedInsert: Bool = false
+        failCapturedInsert: Bool = false,
+        pasteAllowed: Bool = false
     ) {
         self.capturedTarget = capturedTarget
         self.failCapturedInsert = failCapturedInsert
+        self.pasteAllowed = pasteAllowed
     }
 
     func captureTarget() -> FocusedInputTarget? {
         capturedTarget
     }
+
+    func canPaste(into target: FocusedInputTarget) -> Bool { pasteAllowed }
 
     func insert(_ text: String) throws {
         insertedText = text

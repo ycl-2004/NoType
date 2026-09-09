@@ -333,6 +333,10 @@ final class DictationCoordinator {
                 try focusedTextInserter.insert(text, into: targetInput)
                 return
             } catch {
+                if focusedTextInserter.canPaste(into: targetInput) {
+                    AppLogger.log("insert: original input still focused; using paste for unsupported accessibility insertion")
+                    throw InsertionError.unsupportedFocusedElement
+                }
                 AppLogger.log("insert: captured input target failed, refusing to redirect into a different focused field")
                 throw InsertionError.capturedTargetUnavailable
             }

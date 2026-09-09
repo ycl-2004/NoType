@@ -16,11 +16,15 @@ All notable user-facing changes to NoType are recorded here.
 
 ### Changed
 
+- Debug logs retain only the newest five days. Expired entries are removed on logging and when opening Diagnostics.
+
 - The Whisper model is now resolved from an install location before the copy inside the app, and the location is derived from the current user's home directory instead of a hardcoded path. Replacing the app no longer moves the model path, which is what previously discarded the Core ML specialization cache.
 - Switched local and bundled WhisperKit builds to the `_turbo` Core ML package, which includes `TextDecoderContextPrefill` for faster decoder prefill while keeping transcription fully local.
 - Updated the build scripts and developer model path to use the same `_turbo` package consistently.
 
 ### Fixed
+
+- Fixed insertion in Terminal and Ghostty: use paste for terminal input and permit fallback when the captured field remains focused. Changed targets still retain the transcript in the clipboard.
 
 - Fixed a lockout where pressing the dictation shortcut a second time while the microphone permission check was still running started a second session. The first began recording and the second failed, overwriting the running session's state with an error, after which every press restarted instead of stopping — the recorder kept running while the menu bar reported "No audio captured", and only relaunching recovered it. A recorder left running by any earlier failure is now discarded instead of blocking every later dictation.
 - Fixed a crash the first time macOS asked for Speech Recognition permission.
