@@ -24,6 +24,8 @@ All notable user-facing changes to NoType are recorded here.
 
 ### Fixed
 
+- Fixed a crash when recording custom keyboard shortcuts and corrected F1–F20 key labels.
+
 - Fixed insertion in Terminal and Ghostty: use paste for terminal input and permit fallback when the captured field remains focused. Changed targets still retain the transcript in the clipboard.
 
 - Fixed a lockout where pressing the dictation shortcut a second time while the microphone permission check was still running started a second session. The first began recording and the second failed, overwriting the running session's state with an error, after which every press restarted instead of stopping — the recorder kept running while the menu bar reported "No audio captured", and only relaunching recovered it. A recorder left running by any earlier failure is now discarded instead of blocking every later dictation.

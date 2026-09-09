@@ -367,8 +367,47 @@ struct ShortcutBinding: Codable, Equatable, Hashable, Sendable {
             return "Up Arrow"
         case UInt16(kVK_DownArrow):
             return "Down Arrow"
-        case UInt16(kVK_F1)...UInt16(kVK_F20):
-            return "F\(event.keyCode - UInt16(kVK_F1) + 1)"
+        // Carbon function-key codes are neither contiguous nor ordered by F-number.
+        case UInt16(kVK_F1):
+            return "F1"
+        case UInt16(kVK_F2):
+            return "F2"
+        case UInt16(kVK_F3):
+            return "F3"
+        case UInt16(kVK_F4):
+            return "F4"
+        case UInt16(kVK_F5):
+            return "F5"
+        case UInt16(kVK_F6):
+            return "F6"
+        case UInt16(kVK_F7):
+            return "F7"
+        case UInt16(kVK_F8):
+            return "F8"
+        case UInt16(kVK_F9):
+            return "F9"
+        case UInt16(kVK_F10):
+            return "F10"
+        case UInt16(kVK_F11):
+            return "F11"
+        case UInt16(kVK_F12):
+            return "F12"
+        case UInt16(kVK_F13):
+            return "F13"
+        case UInt16(kVK_F14):
+            return "F14"
+        case UInt16(kVK_F15):
+            return "F15"
+        case UInt16(kVK_F16):
+            return "F16"
+        case UInt16(kVK_F17):
+            return "F17"
+        case UInt16(kVK_F18):
+            return "F18"
+        case UInt16(kVK_F19):
+            return "F19"
+        case UInt16(kVK_F20):
+            return "F20"
         default:
             let characters = event.charactersIgnoringModifiers?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let characters, characters.isEmpty == false {
