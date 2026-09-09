@@ -19,17 +19,18 @@ swift test           # 全量测试，约 1 秒
 
 ## 技术栈与结构
 
-两个本地转写引擎，`RoutingTranscriptionEngine` 按次路由：
+三个转写引擎，`RoutingTranscriptionEngine` 按次路由：
 
 - **macOS Speech**（`SpeechTranscriber`，需 macOS 26）：快约 10 倍，但**一个实例只能绑一个
   locale，无法检测语言**（SDK 硬限制，见 ADR-004）。
 - **Bundled Whisper**（WhisperKit + Core ML，`large-v3-turbo`，float16 未量化）。
-- **`Auto (中英混说)` 永远走 Whisper**，无视用户的引擎偏好——只有 Whisper 能检测语言。
+- **SenseVoice Small**（sherpa-onnx + ONNX，支持中文、粤语、英语、日语、韩语）。
+- **`Auto (中英混说)` 使用所选的本地模型**；只有选择 macOS Speech 时才为混合语言回退到 Whisper。
 
 ```
 Sources/Typeless/
   Coordinator/    听写状态机
-  Transcription/  两个引擎 + 路由 + 后处理
+  Transcription/  三个引擎 + 路由 + 后处理
   Audio/          AVAudioRecorder，16kHz 单声道 WAV
   Accessibility/  插入文本，失败退回剪贴板
   Hotkey/         全局快捷键与双击修饰键
@@ -38,9 +39,11 @@ Vendor/WhisperKit-main/   vendored 依赖，不要改
 
 ## 约定
 
-- **模型不进仓库也不进 app bundle。** `LocalWhisperPaths.searchedModelFolders` 故意把
-  `~/Documents/huggingface` 排在 app bundle **之前**：bundle 内路径每次重建都变，会作废
-  Core ML 特化缓存（实测 4s → 4m13s）。见 ADR-005。
+- **下载的模型不进仓库。** Whisper 的共享下载目录 `~/Documents/huggingface` 排在 app
+  bundle **之前**；SenseVoice 只下载到 `~/Documents/huggingface/models/k2-fsa`。bundle
+  内路径每次重建都变，会作废 Core ML 特化缓存（实测 4s → 4m13s）。见 ADR-005、ADR-006。
+- **删除模型只删除 NoType 自己下载的目录。** 菜单里的模型管理不会调用 macOS Speech
+  的系统资产 API，也不会修改 app bundle 或其他 Hugging Face 模型。
 - **本地安装不要 `INCLUDE_MODEL=1`**，那是发给别人的 release 才用的（ADR-002）。
 - 覆盖 `/Applications` 前必须用开发证书签名，否则 designated requirement 变化，
   麦克风/辅助功能/语音识别权限全部重置。
@@ -50,7 +53,7 @@ Vendor/WhisperKit-main/   vendored 依赖，不要改
 
 ## 当前状态
 
-已发布 0.3.0。`[Unreleased]` 中：双引擎路由、本地模型就绪状态、以及一批 Whisper 延迟
+已发布 0.3.0。`[Unreleased]` 中：三引擎路由、本地模型就绪状态、以及一批 Whisper 延迟
 优化（尾部静音裁剪、VAD 分块、温度回退封顶）。
 
 下一步最有价值的是**流式转写**：目前是批处理，全部解码时间都落在用户松手之后，

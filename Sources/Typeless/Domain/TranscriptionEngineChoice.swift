@@ -2,15 +2,18 @@ import Foundation
 
 /// Which speech engine the user wants NoType to transcribe with.
 ///
-/// The two engines fail in opposite directions, so neither is strictly better:
+/// The engines make different trade-offs, so none is strictly better:
 ///
 /// - `appleSpeech` is far faster and never translates or invents subtitle sign-offs, but a
 ///   transcriber is built for exactly one language. It cannot detect what is being spoken.
-/// - `bundledWhisper` detects the spoken language on its own, which is the only way `Auto` can
-///   work, at the cost of latency and the occasional hallucinated closer.
+/// - `bundledWhisper` detects the spoken language on its own and keeps the existing mixed-language
+///   behavior, at the cost of latency and the occasional hallucinated closer.
+/// - `senseVoice` detects the spoken language for Chinese, Cantonese, English, Japanese, and
+///   Korean through a shared local ONNX model.
 enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
     case appleSpeech
     case bundledWhisper
+    case senseVoice
 
     /// macOS 26 is where `SpeechAnalyzer` first ships. Below it there is nothing to choose between.
     static var isAppleSpeechAvailable: Bool {
@@ -28,6 +31,8 @@ enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
             "macOS Speech (fast)"
         case .bundledWhisper:
             "Bundled Whisper"
+        case .senseVoice:
+            "SenseVoice Small"
         }
     }
 
@@ -37,14 +42,17 @@ enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
             "macOS on-device speech"
         case .bundledWhisper:
             "bundled Whisper model"
+        case .senseVoice:
+            "SenseVoice Small model"
         }
     }
 
-    /// `Auto` asks the engine to work out the language from the audio, which only Whisper can do.
-    /// Picking macOS Speech for a mixed recording would force one language onto the whole clip and
-    /// transliterate the rest — Chinese spoken into an English model comes back as pinyin.
+    /// `Auto` asks the selected local model to work out the language. macOS Speech is the one
+    /// exception: its recognizer is bound to one locale, so mixed speech uses Whisper for the
+    /// existing default behavior.
     func resolvedEngine(for language: DictationRecognitionLanguage) -> TranscriptionEngineChoice {
-        guard self == .appleSpeech, Self.isAppleSpeechAvailable else { return .bundledWhisper }
+        guard self == .appleSpeech else { return self }
+        guard Self.isAppleSpeechAvailable else { return .bundledWhisper }
 
         switch language {
         case .mixed:

@@ -49,7 +49,7 @@ struct ShortcutMenuTests {
         #expect(mainTitles.contains("Debug:") == false)
         #expect(mainTitles.contains { $0.hasPrefix("Log:") } == false)
         #expect(mainTitles.contains("Diagnostics"))
-        #expect(controller.diagnosticsMenu().items.contains { $0.title == "Last Event: Recorder started" })
+        #expect(controller.diagnosticsMenu().items.contains { $0.title == "Recent Activity: Recorder started" })
     }
 
     @Test
@@ -59,19 +59,19 @@ struct ShortcutMenuTests {
 
         appState.setLocalModelReadiness(.preparing)
         var titles = controller.diagnosticsMenu().items.map(\.title)
-        #expect(titles.contains("Local Model: Preparing…"))
-        #expect(titles.contains { $0.contains("Preparing the speech model") })
+        #expect(titles.contains("Speech Model: Preparing…"))
+        #expect(titles.contains { $0.contains("Preparing for dictation") })
 
         appState.setLocalModelReadiness(.ready)
         titles = controller.diagnosticsMenu().items.map(\.title)
-        #expect(titles.contains("Local Model: Ready"))
-        #expect(titles.contains { $0.contains("loaded and ready") })
+        #expect(titles.contains("Speech Model: Ready"))
+        #expect(titles.contains { $0.contains("Ready for dictation") })
 
         appState.setLocalModelReadiness(.failed("Required model is missing"))
         titles = controller.diagnosticsMenu().items.map(\.title)
-        #expect(titles.contains("Local Model: Failed"))
-        #expect(titles.contains("Reason: Required model is missing"))
-        #expect(titles.contains("Retry Model Preparation"))
+        #expect(titles.contains("Speech Model: Failed"))
+        #expect(titles.contains("Details: Required model is missing"))
+        #expect(titles.contains("Try Again"))
     }
 }
 

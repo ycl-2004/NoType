@@ -604,7 +604,7 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
                     self?.onModelReadinessChange?(.preparing)
                     AppLogger.log("WhisperKit: \(message)")
                 }) != nil else {
-                    let declined = "The speech model is not installed. Choose Retry Model Preparation to download it."
+                    let declined = "The speech model is not installed. Choose Try Again to download it."
                     onModelReadinessChange?(.failed(declined))
                     throw TranscriptionError.modelUnavailable(declined)
                 }

@@ -7,6 +7,7 @@ final class MenuBarController: NSObject {
     private let microphonePermissionManager: MicrophonePermissionManaging
     private let accessibilityPermissionManager: AccessibilityPermissionManaging
     private let permissionSettingsOpener: PermissionSettingsOpening
+    private let localModelManager: LocalModelRemoving
     private let statusItem: NSStatusItem
 
     init(
@@ -14,13 +15,15 @@ final class MenuBarController: NSObject {
         coordinator: DictationCoordinator,
         microphonePermissionManager: MicrophonePermissionManaging = MicrophonePermissionManager(),
         accessibilityPermissionManager: AccessibilityPermissionManaging = AccessibilityPermissionManager(),
-        permissionSettingsOpener: PermissionSettingsOpening = SystemSettingsOpener()
+        permissionSettingsOpener: PermissionSettingsOpening = SystemSettingsOpener(),
+        localModelManager: LocalModelRemoving = LocalModelManager()
     ) {
         self.appState = appState
         self.coordinator = coordinator
         self.microphonePermissionManager = microphonePermissionManager
         self.accessibilityPermissionManager = accessibilityPermissionManager
         self.permissionSettingsOpener = permissionSettingsOpener
+        self.localModelManager = localModelManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         appState.onChange = { [weak self] in
@@ -156,8 +159,9 @@ final class MenuBarController: NSObject {
         return menu
     }
 
-    /// Auto silently routes to Whisper whatever the user picked, so the menu says so rather than
-    /// showing a preference the current recognition mode is not honouring.
+    /// Auto silently routes away from macOS Speech because that engine cannot detect the spoken
+    /// language, so the menu says so rather than showing a preference the current mode is not
+    /// honouring.
     private var engineMenuSummary: String {
         let selected = appState.selectedTranscriptionEngine
         let effective = selected.resolvedEngine(for: appState.selectedRecognitionLanguage)
@@ -185,9 +189,43 @@ final class MenuBarController: NSObject {
         menu.addItem(.separator())
 
         let note = TranscriptionEngineChoice.isAppleSpeechAvailable
-            ? "Auto → Whisper"
-            : "Needs macOS 26"
+            ? "Auto uses a multilingual local model"
+            : "Needs macOS 26 for macOS Speech"
         menu.addItem(NSMenuItem(title: note, action: nil, keyEquivalent: ""))
+
+        menu.addItem(.separator())
+        let manageModelsItem = NSMenuItem(title: "Manage Downloaded Models", action: nil, keyEquivalent: "")
+        manageModelsItem.submenu = downloadedModelMenu()
+        menu.addItem(manageModelsItem)
+
+        return menu
+    }
+
+    private func downloadedModelMenu() -> NSMenu {
+        let menu = NSMenu()
+        let canRemove = appState.dictationState == .idle
+
+        for model in DownloadedLocalModel.allCases {
+            let installed = localModelManager.isInstalled(model)
+            let item = NSMenuItem(
+                title: installed ? "Delete \(model.menuTitle)" : "\(model.menuTitle) (not installed)",
+                action: installed ? #selector(handleDeleteDownloadedModel(_:)) : nil,
+                keyEquivalent: ""
+            )
+            item.target = installed ? self : nil
+            item.representedObject = model.rawValue
+            item.isEnabled = installed && canRemove
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+        let locationItem = NSMenuItem(
+            title: "Only NoType downloads are removed",
+            action: nil,
+            keyEquivalent: ""
+        )
+        locationItem.isEnabled = false
+        menu.addItem(locationItem)
 
         return menu
     }
@@ -319,14 +357,14 @@ final class MenuBarController: NSObject {
 
         let readiness = appState.localModelReadiness
         let modelStatusItem = NSMenuItem(
-            title: "Local Model: \(readiness.menuTitle)",
+            title: "Speech Model: \(readiness.menuTitle)",
             action: nil,
             keyEquivalent: ""
         )
         modelStatusItem.isEnabled = false
         modelStatusItem.image = NSImage(
             systemSymbolName: readiness.symbolName,
-            accessibilityDescription: "Local model \(readiness.menuTitle)"
+            accessibilityDescription: "Speech model \(readiness.menuTitle)"
         )
         menu.addItem(modelStatusItem)
 
@@ -339,7 +377,7 @@ final class MenuBarController: NSObject {
             let oneLineReason = reason.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             let isTruncated = oneLineReason.count > 110
             let reasonItem = NSMenuItem(
-                title: "Reason: \(oneLineReason.prefix(110))\(isTruncated ? "…" : "")",
+                title: "Details: \(oneLineReason.prefix(110))\(isTruncated ? "…" : "")",
                 action: nil,
                 keyEquivalent: ""
             )
@@ -349,7 +387,7 @@ final class MenuBarController: NSObject {
             menu.addItem(reasonItem)
 
             let retryItem = NSMenuItem(
-                title: "Retry Model Preparation",
+                title: "Try Again",
                 action: #selector(handleRetryModelPreparation),
                 keyEquivalent: ""
             )
@@ -360,22 +398,23 @@ final class MenuBarController: NSObject {
         menu.addItem(.separator())
 
         if let lastDebugMessage = appState.lastDebugMessage {
-            let debugItem = NSMenuItem(title: "Last Event: \(lastDebugMessage)", action: nil, keyEquivalent: "")
+            let debugItem = NSMenuItem(title: "Recent Activity: \(lastDebugMessage)", action: nil, keyEquivalent: "")
             debugItem.isEnabled = false
             menu.addItem(debugItem)
             menu.addItem(.separator())
         }
 
         let openLogItem = NSMenuItem(
-            title: "Open Debug Log",
+            title: "View Debug Log",
             action: #selector(handleOpenDebugLog),
             keyEquivalent: ""
         )
         openLogItem.target = self
         menu.addItem(openLogItem)
 
-        let logPathItem = NSMenuItem(title: AppLogger.debugLogURL.path, action: nil, keyEquivalent: "")
+        let logPathItem = NSMenuItem(title: "Log file: notype-debug.log", action: nil, keyEquivalent: "")
         logPathItem.isEnabled = false
+        logPathItem.toolTip = AppLogger.debugLogURL.path
         menu.addItem(logPathItem)
 
         return menu
@@ -385,6 +424,38 @@ final class MenuBarController: NSObject {
     private func handleRetryModelPreparation() {
         Task { [coordinator] in
             await coordinator.prepareForFirstDictation()
+        }
+    }
+
+    @objc
+    private func handleDeleteDownloadedModel(_ sender: NSMenuItem) {
+        guard appState.dictationState == .idle,
+              let rawValue = sender.representedObject as? String,
+              let model = DownloadedLocalModel(rawValue: rawValue),
+              localModelManager.isInstalled(model) else {
+            return
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Delete \(model.menuTitle)?"
+        alert.informativeText = "This removes \(model.locationDescription). macOS Speech assets are not affected."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete Model")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            let removed = try localModelManager.remove(model)
+            guard removed else { return }
+            appState.setLocalModelReadiness(.waiting)
+            appState.setDebugMessage("Deleted \(model.menuTitle) from the NoType model folders")
+        } catch {
+            let errorAlert = NSAlert(error: error)
+            errorAlert.messageText = "Could not delete \(model.menuTitle)"
+            errorAlert.informativeText = "The model files were left in place."
+            errorAlert.runModal()
         }
     }
 

@@ -7,7 +7,9 @@ All notable user-facing changes to NoType are recorded here.
 ### Added
 
 - Added transcription through the on-device speech engine built into macOS 26, selectable as **Engine → macOS Speech (fast)** in the menu bar. It does not translate, does not emit subtitle sign-off hallucinations, and returns a transcript far sooner than the bundled model. Like the bundled model, it runs entirely on the Mac.
-- Added an engine choice that persists across launches. **Auto (中英混说) always uses Whisper** whichever engine is selected, because only Whisper detects the spoken language; the menu shows this as `Engine: macOS Speech (fast) → Bundled Whisper` when it applies. See [ADR-004](docs/decisions/004-two-engine-routing.md).
+- Added an engine choice that persists across launches. When macOS Speech is selected, **Auto (中英混说) uses Whisper** because the system recognizer cannot detect the spoken language; the menu shows this as `Engine: macOS Speech (fast) → Bundled Whisper` when it applies. See [ADR-004](docs/decisions/004-two-engine-routing.md).
+- Added **SenseVoice Small** as a third selectable local engine through sherpa-onnx. It supports Chinese, Cantonese, English, Japanese, and Korean, keeps one ONNX model copy under `~/Documents/huggingface/models/k2-fsa`, and is loaded only when selected. See [ADR-006](docs/decisions/006-sensevoice-engine-and-model-storage.md).
+- Added **Manage Downloaded Models** under the engine menu. Deletion is confirmed before removing NoType's downloaded Whisper or SenseVoice folders; macOS Speech system assets and unrelated Hugging Face models are never targeted.
 - Added a prompt asking where to install the Whisper model when no copy is found, offering a shared folder (`~/Documents/huggingface`, reused by other WhisperKit apps) or a private one (`~/Library/Application Support/NoType`, removed with the app). Nothing is downloaded until the location is chosen. See [ADR-005](docs/decisions/005-model-location-strategy.md).
 - Added a live local-model status section to Diagnostics with Preparing, Ready, and Failed states, first-launch guidance, failure details, and retry support without requiring the debug log.
 

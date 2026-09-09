@@ -29,6 +29,30 @@ struct TranscriptionEngineRoutingTests {
     }
 
     @Test
+    func choosingSenseVoiceKeepsEveryModeOnSenseVoice() {
+        for language in DictationRecognitionLanguage.allCases {
+            #expect(TranscriptionEngineChoice.senseVoice.resolvedEngine(for: language) == .senseVoice)
+        }
+    }
+
+    @Test
+    func routerSendsSenseVoiceDictationToSenseVoice() async throws {
+        let appState = AppState(userDefaults: makeIsolatedDefaults())
+        appState.setTranscriptionEngine(.senseVoice)
+        let senseVoice = RoutingSpyEngine(name: "senseVoice")
+        let router = RoutingTranscriptionEngine(
+            appState: appState,
+            makeAppleEngine: { nil },
+            makeWhisperEngine: { RoutingSpyEngine(name: "whisper") },
+            makeSenseVoiceEngine: { senseVoice }
+        )
+
+        _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
+
+        #expect(senseVoice.transcribeCount == 1)
+    }
+
+    @Test
     func routerSendsSingleLanguageDictationToMacOSSpeech() async throws {
         guard TranscriptionEngineChoice.isAppleSpeechAvailable else { return }
         let appState = AppState(userDefaults: makeIsolatedDefaults())
@@ -184,7 +208,7 @@ struct TranscriptionEngineMenuTests {
     }
 
     @Test
-    func engineSubmenuListsBothEnginesAndMarksTheSelectedOne() {
+    func engineSubmenuListsAllEnginesAndMarksTheSelectedOne() {
         let appState = makeMenuAppState()
         appState.setTranscriptionEngine(.bundledWhisper)
         let controller = MenuBarController(appState: appState, coordinator: DictationCoordinator(appState: appState))
@@ -194,8 +218,24 @@ struct TranscriptionEngineMenuTests {
 
         #expect(titles.contains(TranscriptionEngineChoice.appleSpeech.menuTitle))
         #expect(titles.contains(TranscriptionEngineChoice.bundledWhisper.menuTitle))
+        #expect(titles.contains(TranscriptionEngineChoice.senseVoice.menuTitle))
         #expect(items.first { $0.title == TranscriptionEngineChoice.bundledWhisper.menuTitle }?.state == .on)
         #expect(items.first { $0.title == TranscriptionEngineChoice.appleSpeech.menuTitle }?.state == .off)
+        #expect(items.first { $0.title == TranscriptionEngineChoice.senseVoice.menuTitle }?.state == .off)
+    }
+
+    @Test
+    func engineSubmenuOffersDownloadedModelManagementWithoutMacOSSpeechDeletion() {
+        let appState = makeMenuAppState()
+        let controller = MenuBarController(appState: appState, coordinator: DictationCoordinator(appState: appState))
+        let menu = controller.transcriptionEngineMenu()
+        let managementItem = menu.items.first { $0.title == "Manage Downloaded Models" }
+        let titles = managementItem?.submenu?.items.map(\.title) ?? []
+
+        #expect(titles.contains { $0.contains("Whisper") })
+        #expect(titles.contains { $0.contains("SenseVoice") })
+        #expect(titles.contains("Only NoType downloads are removed"))
+        #expect(titles.contains { $0.contains("macOS Speech") } == false)
     }
 
     /// Auto overrides the preference, so the menu title has to admit it rather than showing a

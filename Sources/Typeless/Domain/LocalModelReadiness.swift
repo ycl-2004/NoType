@@ -20,13 +20,13 @@ enum LocalModelReadiness: Equatable {
     var detailText: String {
         switch self {
         case .waiting:
-            "Preparation starts automatically after launch."
+            "It will prepare automatically when needed."
         case .preparing:
-            "Preparing the speech model. The first run may download it or specialize it."
+            "Preparing for dictation. The first setup may take a few minutes."
         case .ready:
-            "The speech model is loaded and ready."
+            "Ready for dictation."
         case .failed:
-            "Preparation did not complete. Retry or inspect the debug log."
+            "Couldn’t prepare the speech model. Try again or view the debug log."
         }
     }
 

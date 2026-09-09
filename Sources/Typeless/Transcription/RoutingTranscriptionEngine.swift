@@ -2,12 +2,13 @@ import Foundation
 
 /// Sends each dictation to the engine that can actually handle it.
 ///
-/// The routing rule lives in `TranscriptionEngineChoice.resolvedEngine(for:)`: the user picks a
-/// preferred engine, but `Auto` always falls to Whisper because only Whisper detects the spoken
-/// language. Everything else honours the preference.
+/// The routing rule lives in `TranscriptionEngineChoice.resolvedEngine(for:)`: local model choices
+/// are honored for every recognition mode, while macOS Speech falls back to Whisper for mixed
+/// speech because its recognizer is bound to one locale.
 ///
-/// Whisper is built on first use rather than up front. A user who stays on macOS Speech never pays
-/// for loading the bundled model, which is the whole reason the fast path is worth having.
+/// Each model-backed engine is built on first use rather than up front. A user who stays on macOS
+/// Speech never pays for loading either local model, which is the whole reason the fast path is
+/// worth having.
 @MainActor
 final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadinessReporting {
     var onModelReadinessChange: ((LocalModelReadiness) -> Void)?
@@ -15,8 +16,10 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
     private let appState: AppState
     private let makeAppleEngine: () -> TranscriptionEngine?
     private let makeWhisperEngine: () -> TranscriptionEngine
+    private let makeSenseVoiceEngine: () -> TranscriptionEngine
     private var appleEngine: TranscriptionEngine?
     private var whisperEngine: TranscriptionEngine?
+    private var senseVoiceEngine: TranscriptionEngine?
 
     init(
         appState: AppState,
@@ -24,11 +27,13 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
             if #available(macOS 26.0, *) { return AppleSpeechTranscriptionEngine() }
             return nil
         },
-        makeWhisperEngine: @escaping () -> TranscriptionEngine = { WhisperKitTranscriptionEngine() }
+        makeWhisperEngine: @escaping () -> TranscriptionEngine = { WhisperKitTranscriptionEngine() },
+        makeSenseVoiceEngine: @escaping () -> TranscriptionEngine = { SenseVoiceTranscriptionEngine() }
     ) {
         self.appState = appState
         self.makeAppleEngine = makeAppleEngine
         self.makeWhisperEngine = makeWhisperEngine
+        self.makeSenseVoiceEngine = makeSenseVoiceEngine
     }
 
     func transcribe(
@@ -79,11 +84,18 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
             bindReadiness(of: created)
             whisperEngine = created
             return created
+
+        case .senseVoice:
+            if let senseVoiceEngine { return senseVoiceEngine }
+            let created = makeSenseVoiceEngine()
+            bindReadiness(of: created)
+            senseVoiceEngine = created
+            return created
         }
     }
 
-    /// Both engines report their own preparation lifecycle, and whichever ran most recently is the
-    /// one the Diagnostics menu should be describing.
+    /// Each local engine reports its own preparation lifecycle, and whichever ran most recently is
+    /// the one the Diagnostics menu should be describing.
     private func bindReadiness(of engine: TranscriptionEngine) {
         guard let reporter = engine as? LocalModelReadinessReporting else { return }
         reporter.onModelReadinessChange = { [weak self] readiness in
