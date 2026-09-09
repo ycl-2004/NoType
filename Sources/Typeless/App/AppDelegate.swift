@@ -5,11 +5,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var appState: AppState!
     private(set) var coordinator: DictationCoordinator!
     private var menuBarController: MenuBarController?
-    private var dictationHotkeyManager: GlobalHotkeyManager?
-    private var dictationDoubleTapMonitor: ModifierDoubleTapMonitor?
-    private var recognitionModeHotkeyManager: GlobalHotkeyManager?
-    private var registeredDictationShortcut: DictationShortcutChoice?
-    private var registeredRecognitionModeShortcut: RecognitionModeShortcutChoice?
+    private var dictationShortcutMonitor: ShortcutMonitor?
+    private var recognitionModeShortcutMonitor: ShortcutMonitor?
+    private var registeredDictationShortcuts: [ShortcutBinding]?
+    private var registeredRecognitionModeShortcuts: [ShortcutBinding]?
     private let microphonePermissionManager = MicrophonePermissionManager()
     private let accessibilityPermissionManager = AccessibilityPermissionManager()
     private let permissionSettingsOpener = SystemSettingsOpener()
@@ -43,9 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        dictationHotkeyManager?.unregister()
-        dictationDoubleTapMonitor?.stop()
-        recognitionModeHotkeyManager?.unregister()
+        dictationShortcutMonitor?.stop()
+        recognitionModeShortcutMonitor?.stop()
     }
 
     private func refreshShortcutRegistration() {
@@ -54,14 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshDictationShortcutRegistration() {
-        let selectedShortcut = appState.selectedDictationShortcut
-        guard registeredDictationShortcut != selectedShortcut else { return }
+        let selectedShortcuts = appState.dictationShortcuts
+        guard registeredDictationShortcuts != selectedShortcuts else { return }
 
-        dictationHotkeyManager?.unregister()
-        dictationHotkeyManager = nil
-        dictationDoubleTapMonitor?.stop()
-        dictationDoubleTapMonitor = nil
-        registeredDictationShortcut = selectedShortcut
+        dictationShortcutMonitor?.stop()
+        dictationShortcutMonitor = nil
+        registeredDictationShortcuts = selectedShortcuts
 
         let action: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
@@ -70,52 +66,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if let modifierKey = selectedShortcut.doubleTapKey {
-            let monitor = ModifierDoubleTapMonitor(modifierKey: modifierKey, onDoubleTap: action)
-            if monitor.start() {
-                dictationDoubleTapMonitor = monitor
-            } else {
-                appState.setDebugMessage("Failed to enable \(selectedShortcut.menuTitle)")
-            }
-            return
-        }
+        guard selectedShortcuts.isEmpty == false else { return }
 
-        if let keyCombination = selectedShortcut.keyCombination {
-            let manager = GlobalHotkeyManager(
-                hotkeyKind: .dictation,
-                keyCombination: keyCombination,
-                onHotkeyPressed: action
-            )
-            if manager.register() {
-                dictationHotkeyManager = manager
-            } else {
-                appState.setDebugMessage("Failed to enable \(selectedShortcut.menuTitle)")
-            }
+        let monitor = ShortcutMonitor(bindings: selectedShortcuts, onShortcutPressed: action)
+        if monitor.start() {
+            dictationShortcutMonitor = monitor
+        } else {
+            appState.setDebugMessage("Could not enable the dictation shortcuts")
         }
     }
 
     private func refreshRecognitionModeShortcutRegistration() {
-        let selectedShortcut = appState.selectedRecognitionModeShortcut
-        guard registeredRecognitionModeShortcut != selectedShortcut else { return }
+        let selectedShortcuts = appState.recognitionModeShortcuts
+        guard registeredRecognitionModeShortcuts != selectedShortcuts else { return }
 
-        recognitionModeHotkeyManager?.unregister()
-        recognitionModeHotkeyManager = nil
-        registeredRecognitionModeShortcut = selectedShortcut
+        recognitionModeShortcutMonitor?.stop()
+        recognitionModeShortcutMonitor = nil
+        registeredRecognitionModeShortcuts = selectedShortcuts
 
-        guard let keyCombination = selectedShortcut.keyCombination else { return }
-        let manager = GlobalHotkeyManager(
-            hotkeyKind: .recognitionModeCycle,
-            keyCombination: keyCombination
-        ) { [weak self] in
+        guard selectedShortcuts.isEmpty == false else { return }
+
+        let monitor = ShortcutMonitor(bindings: selectedShortcuts) { [weak self] in
             guard let self else { return }
             let nextLanguage = self.appState.selectedRecognitionLanguage.nextCycleValue
             self.appState.setRecognitionLanguage(nextLanguage)
             self.appState.setDebugMessage("Recognition language set to \(nextLanguage.statusDescription)")
         }
-        if manager.register() {
-            recognitionModeHotkeyManager = manager
+        if monitor.start() {
+            recognitionModeShortcutMonitor = monitor
         } else {
-            appState.setDebugMessage("Failed to enable \(selectedShortcut.menuTitle)")
+            appState.setDebugMessage("Could not enable the recognition mode shortcuts")
         }
     }
 }

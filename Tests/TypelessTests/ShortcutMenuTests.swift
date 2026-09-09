@@ -20,21 +20,22 @@ struct ShortcutMenuTests {
     }
 
     @Test
-    func shortcutMenuOffersIndependentDisabledChoices() {
+    func shortcutMenuOffersIndependentShortcutConfiguration() {
         let appState = makeShortcutMenuAppState()
         let controller = MenuBarController(appState: appState, coordinator: DictationCoordinator(appState: appState))
         let shortcutItems = controller.shortcutsMenu().items
 
-        #expect(shortcutItems[0].submenu?.items.contains { $0.title == "Disabled" } == true)
-        #expect(shortcutItems[1].submenu?.items.contains { $0.title == "Disabled" } == true)
+        #expect(shortcutItems[0].submenu?.items.contains { $0.title == "Add Shortcut…" } == true)
+        #expect(shortcutItems[1].submenu?.items.contains { $0.title == "Add Shortcut…" } == true)
+        #expect(shortcutItems[1].submenu?.items.contains { $0.title == "No shortcuts set" } == true)
     }
 
     @Test
-    func selectingDisabledDictationShortcutUpdatesAppState() {
+    func disablingDictationShortcutsUpdatesAppState() {
         let appState = makeShortcutMenuAppState()
-        appState.setDictationShortcut(.disabled)
+        appState.disableDictationShortcuts()
 
-        #expect(appState.selectedDictationShortcut == .disabled)
+        #expect(appState.dictationShortcuts.isEmpty)
     }
 
     @Test

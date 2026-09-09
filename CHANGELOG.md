@@ -12,6 +12,7 @@ All notable user-facing changes to NoType are recorded here.
 - Added **Manage Downloaded Models** under the engine menu. Deletion is confirmed before removing NoType's downloaded Whisper or SenseVoice folders; macOS Speech system assets and unrelated Hugging Face models are never targeted.
 - Added a prompt asking where to install the Whisper model when no copy is found, offering a shared folder (`~/Documents/huggingface`, reused by other WhisperKit apps) or a private one (`~/Library/Application Support/NoType`, removed with the app). Nothing is downloaded until the location is chosen. See [ADR-005](docs/decisions/005-model-location-strategy.md).
 - Added a live local-model status section to Diagnostics with Preparing, Ready, and Failed states, first-launch guidance, failure details, and retry support without requiring the debug log.
+- Added user-recorded shortcuts for dictation and recognition-mode cycling. Each action can have multiple shortcuts, each shortcut can use a regular key or modifier combination with single or double press activation, and left/right modifier keys are kept distinct. Dictation defaults to Double Command; recognition-mode shortcuts are off by default.
 
 ### Changed
 

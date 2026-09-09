@@ -82,7 +82,7 @@ open /Applications/NoType.app
 - macOS 15.0 or later; **macOS 26 or later** to use the macOS Speech engine
 - About 4 GB of free space during download and extraction
 - Microphone permission for recording
-- Accessibility permission for global double-tap shortcuts and direct insertion
+- Accessibility permission for global keyboard shortcuts and direct insertion
 - Speech Recognition permission for the macOS Speech engine (macOS 26 or later)
 
 ## Why NoType
@@ -98,7 +98,7 @@ open /Applications/NoType.app
 
 **Dictation**
 
-- Start and stop from anywhere with Double Command, Double Option, or Command + Shift + H.
+- Start and stop from anywhere with a customizable keyboard shortcut. The default is Double Command; regular keys, modifier combinations, and left/right modifier keys are supported.
 - Automatic five-minute recording limit prevents an abandoned session from running indefinitely.
 - Very short accidental recordings are ignored instead of being sent through transcription.
 - The transcription model is prepared in the background after launch to reduce first-use waiting.
@@ -118,7 +118,7 @@ open /Applications/NoType.app
 - **Auto (中英混说)** for natural mixed Chinese and English speech.
 - **中文优先** and **英文优先** for language-biased recognition.
 - Follow-model, Simplified Chinese, or Traditional Chinese output preferences.
-- A separate shortcut cycles recognition modes without opening the menu.
+- An optional shortcut cycles recognition modes without opening the menu. It is off by default.
 
 **Text delivery**
 
@@ -151,12 +151,14 @@ output behavior, shortcuts, or permissions.
 | 中文优先 | macOS Speech | Bundled Whisper | SenseVoice Small |
 | 英文优先 | macOS Speech | Bundled Whisper | SenseVoice Small |
 
-The default shortcuts are:
+Shortcuts are configured under **Shortcuts** in the menu bar. Choose **Add Shortcut…** to record a regular key, any combination of Command, Option, Control, Shift, and Fn, or a modifier by itself. Each action can have multiple shortcuts, and each shortcut can respond to one press or two quick presses.
+
+The defaults are:
 
 | Action | Default | Other choices |
 | --- | --- | --- |
-| Start / stop dictation | Double Command | Double Option, Command + Shift + H, Disabled |
-| Cycle recognition mode | Command + Shift + Y | Command + Option + Y, Control + Option + Y, Disabled |
+| Start / stop dictation | Double Command | Any recorded shortcut, Disabled |
+| Cycle recognition mode | Off | Any recorded shortcut |
 
 ## Privacy
 
@@ -166,7 +168,7 @@ The default shortcuts are:
 - Temporary audio is removed after transcription succeeds or fails.
 - There are no accounts, analytics, or telemetry in the app.
 - Microphone access is used only for active dictation.
-- Accessibility access is used for the global modifier shortcut, focused-target capture, and text insertion.
+- Accessibility access is used for global keyboard shortcuts, focused-target capture, and text insertion.
 - The clipboard is touched only when the selected output mode or an insertion fallback requires it.
 
 ## Current release
@@ -292,7 +294,7 @@ result goes to the captured field or your clipboard exactly as before.
 <summary>Why does NoType need Microphone and Accessibility permission?</summary>
 
 **Microphone** permission lets NoType record while dictation is active.
-**Accessibility** permission lets it observe the global modifier shortcut,
+**Accessibility** permission lets it observe global keyboard shortcuts,
 remember the focused input, and insert the finished transcript. Copy-only output
 still needs Microphone access but does not require direct text insertion.
 
@@ -401,7 +403,7 @@ before treating a build as a public, notarized release.
 - `Sources/Typeless/Accessibility/` — focused-target capture, direct insertion, clipboard handling, and paste fallback.
 - `Sources/Typeless/Coordinator/` — dictation state transitions and orchestration.
 - `Sources/Typeless/App/` — menu-bar UI, permissions, diagnostics, and app lifecycle.
-- `Sources/Typeless/Hotkey/` — Carbon shortcuts and modifier double-tap detection.
+- `Sources/Typeless/Hotkey/` — shortcut recording, AppKit event monitoring, and press-style detection.
 - `Tests/TypelessTests/` — unit coverage for transcription, coordination, shortcuts, state, permissions, and menu presentation.
 - `Packaging/Info.plist` — app identity, version, permissions text, and minimum macOS version.
 - `scripts/` — local app and self-contained release builds.
@@ -422,12 +424,13 @@ before treating a build as a public, notarized release.
 
 - [Changelog](CHANGELOG.md) — shipped user-facing changes.
 - [Known issues](docs/known-issues.md) — understood limitations and future directions.
-- [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md) — why NoType uses curated shortcuts and modifier double-taps.
+- [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md) — the original shortcut design, now superseded.
 - [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md) — why releases bundle the model instead of downloading it at runtime.
 - [ADR-003: Local model readiness](docs/decisions/003-local-model-readiness.md) — why Diagnostics reflects the actual Core ML loading lifecycle without a percentage.
 - [ADR-004: Two-engine routing](docs/decisions/004-two-engine-routing.md) — why the original two engines are kept and why macOS Speech mixed mode uses Whisper.
 - [ADR-005: Model location strategy](docs/decisions/005-model-location-strategy.md) — why install locations are searched before the app bundle, and why a download asks first.
 - [ADR-006: SenseVoice engine and model storage](docs/decisions/006-sensevoice-engine-and-model-storage.md) — why SenseVoice is additive, where its one shared model lives, and why model deletion cannot touch macOS Speech.
+- [ADR-007: User-recorded shortcuts](docs/decisions/007-user-recorded-shortcuts.md) — how arbitrary shortcuts, left/right modifiers, multiple bindings, and defaults work.
 
 ## Third-party terms
 

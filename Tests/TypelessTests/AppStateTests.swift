@@ -107,7 +107,7 @@ struct AppStateTests {
     }
 
     @Test
-    func defaultsDictationShortcutToEnabledDoubleCommand() {
+    func defaultsDictationShortcutToDoubleCommandAndRecognitionModeOff() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         defer {
@@ -116,27 +116,34 @@ struct AppStateTests {
 
         let appState = AppState(userDefaults: defaults)
 
-        #expect(appState.selectedDictationShortcut == .doubleCommand)
-        #expect(appState.selectedRecognitionModeShortcut == .commandShiftY)
+        #expect(appState.dictationShortcuts == [ShortcutBinding(modifier: .command, pressStyle: .double)])
+        #expect(appState.recognitionModeShortcuts.isEmpty)
     }
 
     @Test
-    func loadsSavedShortcutChoicesFromUserDefaults() {
+    func loadsSavedShortcutBindingsFromUserDefaults() throws {
         let defaults = UserDefaults(suiteName: #function)!
-        defaults.set(DictationShortcutChoice.doubleOption.rawValue, forKey: "dictationShortcutChoice")
-        defaults.set(RecognitionModeShortcutChoice.commandOptionY.rawValue, forKey: "recognitionModeShortcutChoice")
+        let dictation = ShortcutBinding(
+            keyCode: 14,
+            keyName: "E",
+            modifiers: [.leftCommand, .rightOption],
+            pressStyle: .single
+        )
+        let recognition = ShortcutBinding(modifier: .rightControl, pressStyle: .double)
+        defaults.set(try JSONEncoder().encode([dictation]), forKey: "dictationShortcuts")
+        defaults.set(try JSONEncoder().encode([recognition]), forKey: "recognitionModeShortcuts")
         defer {
             defaults.removePersistentDomain(forName: #function)
         }
 
         let appState = AppState(userDefaults: defaults)
 
-        #expect(appState.selectedDictationShortcut == .doubleOption)
-        #expect(appState.selectedRecognitionModeShortcut == .commandOptionY)
+        #expect(appState.dictationShortcuts == [dictation])
+        #expect(appState.recognitionModeShortcuts == [recognition])
     }
 
     @Test
-    func persistsIndependentDisabledShortcutChoices() {
+    func persistsMultipleShortcutBindingsAndCanDisableThem() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         defer {
@@ -144,26 +151,39 @@ struct AppStateTests {
         }
 
         let appState = AppState(userDefaults: defaults)
-        appState.setDictationShortcut(.disabled)
-        appState.setRecognitionModeShortcut(.disabled)
+        let first = ShortcutBinding(modifier: .command, pressStyle: .double)
+        let second = ShortcutBinding(
+            keyCode: 14,
+            keyName: "E",
+            modifiers: [.leftCommand, .rightOption],
+            pressStyle: .single
+        )
+        appState.addDictationShortcut(second)
+        appState.addRecognitionModeShortcut(first)
 
         let restoredState = AppState(userDefaults: defaults)
-        #expect(restoredState.selectedDictationShortcut == .disabled)
-        #expect(restoredState.selectedRecognitionModeShortcut == .disabled)
+        #expect(restoredState.dictationShortcuts.count == 2)
+        #expect(restoredState.recognitionModeShortcuts == [first])
+
+        restoredState.removeDictationShortcut(at: 0)
+        restoredState.disableRecognitionModeShortcuts()
+        #expect(restoredState.dictationShortcuts == [second])
+        #expect(restoredState.recognitionModeShortcuts.isEmpty)
     }
 
     @Test
-    func migratesLegacyShortcutEnablementWithoutLosingDisabledState() {
+    func removesTheOldFixedShortcutDefaults() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.set(true, forKey: "dictationShortcutEnabled")
-        defaults.set(false, forKey: "recognitionModeShortcutEnabled")
+        defaults.set("doubleOption", forKey: "dictationShortcutChoice")
+        defaults.set("commandShiftY", forKey: "recognitionModeShortcutChoice")
         defer {
             defaults.removePersistentDomain(forName: #function)
         }
 
         let appState = AppState(userDefaults: defaults)
 
-        #expect(appState.selectedDictationShortcut == .doubleCommand)
-        #expect(appState.selectedRecognitionModeShortcut == .disabled)
+        #expect(appState.dictationShortcuts == [ShortcutBinding(modifier: .command, pressStyle: .double)])
+        #expect(appState.recognitionModeShortcuts.isEmpty)
     }
 }

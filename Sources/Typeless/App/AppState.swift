@@ -7,10 +7,8 @@ final class AppState: ObservableObject {
         static let chineseScriptPreference = "chineseScriptPreference"
         static let successStatusMode = "successStatusMode"
         static let transcriptionEngine = "transcriptionEngine"
-        static let dictationShortcutChoice = "dictationShortcutChoice"
-        static let recognitionModeShortcutChoice = "recognitionModeShortcutChoice"
-        static let dictationShortcutEnabled = "dictationShortcutEnabled"
-        static let recognitionModeShortcutEnabled = "recognitionModeShortcutEnabled"
+        static let dictationShortcuts = "dictationShortcuts"
+        static let recognitionModeShortcuts = "recognitionModeShortcuts"
     }
 
     private let userDefaults: UserDefaults
@@ -45,15 +43,15 @@ final class AppState: ObservableObject {
             onChange?()
         }
     }
-    @Published var selectedDictationShortcut: DictationShortcutChoice {
+    @Published var dictationShortcuts: [ShortcutBinding] {
         didSet {
-            userDefaults.set(selectedDictationShortcut.rawValue, forKey: DefaultsKey.dictationShortcutChoice)
+            saveShortcuts(dictationShortcuts, key: DefaultsKey.dictationShortcuts)
             onChange?()
         }
     }
-    @Published var selectedRecognitionModeShortcut: RecognitionModeShortcutChoice {
+    @Published var recognitionModeShortcuts: [ShortcutBinding] {
         didSet {
-            userDefaults.set(selectedRecognitionModeShortcut.rawValue, forKey: DefaultsKey.recognitionModeShortcutChoice)
+            saveShortcuts(recognitionModeShortcuts, key: DefaultsKey.recognitionModeShortcuts)
             onChange?()
         }
     }
@@ -68,8 +66,11 @@ final class AppState: ObservableObject {
         selectedTranscriptionEngine = Self.loadTranscriptionEngine(from: userDefaults)
         let savedSuccessStatus = userDefaults.string(forKey: DefaultsKey.successStatusMode)
         selectedSuccessStatusMode = DictationSuccessStatusMode(rawValue: savedSuccessStatus ?? "") ?? .both
-        selectedDictationShortcut = Self.loadDictationShortcut(from: userDefaults)
-        selectedRecognitionModeShortcut = Self.loadRecognitionModeShortcut(from: userDefaults)
+        dictationShortcuts = Self.loadShortcuts(from: userDefaults, key: DefaultsKey.dictationShortcuts)
+            ?? [ShortcutBinding(modifier: .command, pressStyle: .double)]
+        // Recognition mode shortcuts are optional. The old fixed shortcut is intentionally not
+        // migrated because it is being removed from the client-facing configuration.
+        recognitionModeShortcuts = Self.loadShortcuts(from: userDefaults, key: DefaultsKey.recognitionModeShortcuts) ?? []
     }
 
     func update(for state: DictationState) {
@@ -131,14 +132,40 @@ final class AppState: ObservableObject {
         selectedSuccessStatusMode = mode
     }
 
-    func setDictationShortcut(_ shortcut: DictationShortcutChoice) {
-        guard selectedDictationShortcut != shortcut else { return }
-        selectedDictationShortcut = shortcut
+    func addDictationShortcut(_ shortcut: ShortcutBinding) {
+        guard dictationShortcuts.contains(where: { $0.conflicts(with: shortcut) }) == false else { return }
+        dictationShortcuts.append(shortcut)
     }
 
-    func setRecognitionModeShortcut(_ shortcut: RecognitionModeShortcutChoice) {
-        guard selectedRecognitionModeShortcut != shortcut else { return }
-        selectedRecognitionModeShortcut = shortcut
+    func removeDictationShortcut(at index: Int) {
+        guard dictationShortcuts.indices.contains(index) else { return }
+        dictationShortcuts.remove(at: index)
+    }
+
+    func disableDictationShortcuts() {
+        dictationShortcuts = []
+    }
+
+    func addRecognitionModeShortcut(_ shortcut: ShortcutBinding) {
+        guard recognitionModeShortcuts.contains(where: { $0.conflicts(with: shortcut) }) == false else { return }
+        recognitionModeShortcuts.append(shortcut)
+    }
+
+    func removeRecognitionModeShortcut(at index: Int) {
+        guard recognitionModeShortcuts.indices.contains(index) else { return }
+        recognitionModeShortcuts.remove(at: index)
+    }
+
+    func disableRecognitionModeShortcuts() {
+        recognitionModeShortcuts = []
+    }
+
+    var dictationShortcutMenuTitle: String {
+        shortcutMenuTitle(for: dictationShortcuts)
+    }
+
+    var recognitionModeShortcutMenuTitle: String {
+        shortcutMenuTitle(for: recognitionModeShortcuts)
     }
 
     /// A saved preference for macOS Speech is ignored on a Mac that cannot run it, so moving a
@@ -155,29 +182,24 @@ final class AppState: ObservableObject {
         return saved
     }
 
-    private static func loadDictationShortcut(from userDefaults: UserDefaults) -> DictationShortcutChoice {
-        if let rawValue = userDefaults.string(forKey: DefaultsKey.dictationShortcutChoice),
-           let savedChoice = DictationShortcutChoice(rawValue: rawValue) {
-            return savedChoice
-        }
-
-        if let legacyEnabled = userDefaults.object(forKey: DefaultsKey.dictationShortcutEnabled) as? Bool {
-            return legacyEnabled ? .doubleCommand : .disabled
-        }
-
-        return .doubleCommand
+    private static func loadShortcuts(from userDefaults: UserDefaults, key: String) -> [ShortcutBinding]? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode([ShortcutBinding].self, from: data)
     }
 
-    private static func loadRecognitionModeShortcut(from userDefaults: UserDefaults) -> RecognitionModeShortcutChoice {
-        if let rawValue = userDefaults.string(forKey: DefaultsKey.recognitionModeShortcutChoice),
-           let savedChoice = RecognitionModeShortcutChoice(rawValue: rawValue) {
-            return savedChoice
-        }
+    private func saveShortcuts(_ shortcuts: [ShortcutBinding], key: String) {
+        guard let data = try? JSONEncoder().encode(shortcuts) else { return }
+        userDefaults.set(data, forKey: key)
+    }
 
-        if let legacyEnabled = userDefaults.object(forKey: DefaultsKey.recognitionModeShortcutEnabled) as? Bool {
-            return legacyEnabled ? .commandShiftY : .disabled
+    private func shortcutMenuTitle(for shortcuts: [ShortcutBinding]) -> String {
+        switch shortcuts.count {
+        case 0:
+            "Off"
+        case 1:
+            shortcuts[0].menuTitle
+        default:
+            "\(shortcuts.count) Shortcuts"
         }
-
-        return .commandShiftY
     }
 }
