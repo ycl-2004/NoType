@@ -29,6 +29,26 @@ struct TranscriptionEngineTests {
     }
 
     @Test
+    func decodingBoundsTemperatureFallbacksAndChunksLongClips() {
+        // Both settings exist to bound how long a dictation can take. A window that trips
+        // WhisperKit's quality checks is re-decoded from scratch per temperature, and the stock
+        // count of 5 lets one bad window cost six full decodes.
+        for language in [DictationRecognitionLanguage.mixed, .chinese, .english] {
+            let options = WhisperKitTranscriptionEngine.makeDecodingOptions(for: language)
+
+            #expect(options.temperatureFallbackCount == 2)
+            #expect(options.chunkingStrategy == .vad)
+        }
+    }
+
+    @Test
+    func decodingKeepsTranscriptTextOutOfTheSystemLog() {
+        // WhisperKit's verbose path logs every predicted token through os_log, where `log show`
+        // would hand back the text of every dictation.
+        #expect(WhisperKitTranscriptionEngine.makeDecodingOptions(for: .mixed).verbose == false)
+    }
+
+    @Test
     func transcriptResultCanPreserveRawTranscript() {
         let result = TranscriptResult(text: "开会 tomorrow", rawText: "嗯 开会 tomorrow")
 
@@ -637,5 +657,43 @@ struct TranscriptionEngineTests {
     func localWhisperPathValidationRequiresLargeV3Model() {
         #expect(LocalWhisperPaths.validationError() == nil)
         #expect(LocalWhisperPaths.modelFolder.contains(LocalWhisperPaths.expectedModelIdentifier))
+    }
+}
+
+struct ChineseSpacingTests {
+    @Test
+    func chunkBoundarySpacesBetweenHanCharactersAreRemoved() {
+        // Chunked decoding leaves a space where it split the audio. Written Chinese has no word
+        // spacing, so a space with Han on both sides was never spoken.
+        let cleaned = TranscriptPostProcessor.clean(
+            "我们用的是本地的麦克风输入 采样率是16000赫兹",
+            preferredLanguage: .chinese,
+            chineseScriptPreference: .simplified
+        )
+
+        #expect(cleaned == "我们用的是本地的麦克风输入采样率是16000赫兹")
+    }
+
+    @Test
+    func spacesAroundLatinTextInMixedSentencesSurvive() {
+        // The whole point of mixed mode. Collapsing these would be worse than the defect above.
+        let cleaned = TranscriptPostProcessor.clean(
+            "等下我们用 GitHub Action 跑一遍 CI",
+            preferredLanguage: .mixed,
+            chineseScriptPreference: .followModel
+        )
+
+        #expect(cleaned == "等下我们用 GitHub Action 跑一遍 CI")
+    }
+
+    @Test
+    func spacesBetweenHanAndDigitsAreLeftAlone() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "采样率是 16000 赫兹",
+            preferredLanguage: .chinese,
+            chineseScriptPreference: .simplified
+        )
+
+        #expect(cleaned == "采样率是 16000 赫兹")
     }
 }

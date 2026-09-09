@@ -50,23 +50,27 @@ The speaker had said 「OK OK 现在好吗」. The model translated instead of t
 - The effect cannot be verified by unit tests. It needs real-device A/B against recorded samples,
   and the change should be prepared for rollback.
 
-### 2. No voice-activity detection
+### 2. Voice-activity detection is only used to trim the tail
 
-Nothing checks whether a clip actually contains speech. A clip that is entirely silence or room
-noise is still sent to the model, and Whisper answers with the sign-off phrases that dominate its
-subtitle training data.
+The silent-tail case described here is now handled. `TrailingSilenceTrimmer` runs WhisperKit's
+`EnergyVAD` over the clip and drops everything after the last frame with speech in it, keeping 0.5s
+of padding and only acting when at least 1.0s would be removed. Verified on a 34.3s recording
+ending in 6s of silence: 5.50s trimmed, 28.8s transcribed, same transcript, and the clip stayed
+inside one 30s window instead of spilling into a second.
 
-A clip-length floor (0.3s) now catches mistriggers, and trailing sign-offs are stripped in
-post-processing, so the common cases are covered. What remains uncovered is a clip that contains
-real speech followed by a long silent tail — the case that produces a hallucinated closer appended
-to a genuine transcript.
+Three deliberate limits remain:
 
-**Direction.** Measure input level during capture and either skip transcription for clips with no
-speech-level audio, or trim the silent tail before handing the file to WhisperKit.
+- **Only the tail.** Trimming the head or the middle risks clipping real speech, and "I spoke and
+  nothing happened" is a worse failure than a stray closing phrase.
+- **A clip the detector cannot hear is passed through untouched**, not discarded. Quiet speech
+  still reaches the model; genuine silence is already handled by the empty-transcript path.
+- **The 0.02 energy threshold is `EnergyVAD`'s default and has been validated against digital
+  silence only.** Whether it treats a real noisy room as silence is not yet measured. If a user
+  reports a clipped final word, this threshold is the first thing to check.
 
-**Risk.** The failure mode of an over-eager threshold is discarding quiet but real speech, which
-presents to the user as "I spoke and nothing happened" — worse than the occasional stray phrase it
-would prevent. Any threshold needs conservative tuning and real-device validation.
+**Still uncovered.** Nothing skips transcription outright for a clip with no speech-level audio
+anywhere; such a clip is still decoded, and the sign-off hallucination is caught downstream by
+post-processing rather than prevented.
 
 ### 3. Repetition detection only sees adjacent single tokens
 
@@ -117,6 +121,25 @@ segmentation, or spoken-to-written conversion.
 a remote model breaks the "everything runs locally" property that the README states, and a local
 model adds materially to latency and bundle size. Not a change to make casually.
 
+### 12. Chunked decoding costs some punctuation
+
+`chunkingStrategy: .vad` decodes each chunk independently, so the decoder loses the preceding text
+it would otherwise be conditioned on. Measured across an 11-clip A/B on 2026-09-08:
+
+| Clip | Similarity | What differed |
+| --- | --- | --- |
+| Nine clips up to 28s | identical | nothing |
+| 85s | 97.8% | punctuation, and one 他们/它们 |
+| 154s | 98.5% | punctuation only — about 13 fewer commas in 667 characters |
+
+No word or character content was lost at any length. The stray spaces this also introduced are
+fixed in `TranscriptPostProcessor`; the missing commas are not, and are the standing cost of the
+8–20% speed-up on clips over 30s.
+
+**Direction.** If punctuation matters more than the speed-up, `chunkingStrategy` back to `.none` is
+a one-line change. A better fix would seed each chunk with the tail of the previous chunk's
+transcript as `promptTokens`, which collides with issue #1 and its prefill-cache cost.
+
 ---
 
 ## Open: session behaviour
@@ -132,6 +155,33 @@ model adds materially to latency and bundle size. Not a change to make casually.
 
 **Direction.** These are independent features rather than defects. Cancellation is the cheapest and
 probably the most useful of the four.
+
+---
+
+### 11. Whisper is not prewarmed when it is only reached through `Auto`
+
+`RoutingTranscriptionEngine.prewarm()` warms the engine the *current* settings resolve to. With
+`Engine: macOS Speech` and a single-language recognition mode selected at launch, that is the Apple
+engine — but `Auto (中英混说)` overrides the preference and always routes to Whisper, so switching to
+`Auto` after launch meets a cold model.
+
+Observed on 2026-09-08 with exactly that configuration:
+
+```
+02:26:24 Routing.prewarm: preparing macOS on-device speech
+02:30:25 Routing: Auto mixed ... resolved to bundled Whisper model
+02:30:25 WhisperKit: loading validated local model ...
+02:30:27 WhisperKit: pipeline loaded successfully
+```
+
+Two seconds, paid once per launch, by a user whose preference says they want the fast engine. The
+lazy load is deliberate — the comment on `prewarm()` says a user who stays on macOS Speech should
+never pay for the bundled model — but it did not anticipate "prefers macOS Speech *and* uses Auto",
+which is a normal combination rather than an edge case.
+
+**Direction.** Warm Whisper in the background as well whenever the app is reachable from `Auto`,
+accepting a second model resident in memory. Alternatively warm it lazily on the first switch to
+`Auto` rather than on the first dictation after it.
 
 ---
 

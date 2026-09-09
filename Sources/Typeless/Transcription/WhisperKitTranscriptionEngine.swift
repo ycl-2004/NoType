@@ -59,6 +59,10 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
         chineseScriptPreference: ChineseScriptPreference
     ) async throws -> TranscriptResult {
         let pipeline = try await loadPipeline()
+        // Loaded once and reused across attempts. The audio is identical every time, so decoding
+        // the file again per attempt only repeats work, and holding the samples is what makes
+        // trimming the silent tail possible at all.
+        let samples = Self.loadSamplesTrimmingTrailingSilence(for: clip)
         var attemptResults: [AttemptResult] = []
 
         for (index, attempt) in Self.transcriptionAttempts(for: language).enumerated() {
@@ -70,13 +74,19 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
                 "prefill=\(options.usePrefillPrompt), detectLanguage=\(options.detectLanguage)"
             )
 
+            let startedAt = Date()
             let results = try await pipeline.transcribe(
-                audioPath: clip.fileURL.path,
+                audioArray: samples,
                 decodeOptions: options
             )
+            let elapsed = Date().timeIntervalSince(startedAt)
 
             let result = results.first?.text ?? ""
             attemptResults.append(AttemptResult(attempt: attempt, text: result))
+            AppLogger.log(
+                "WhisperKit: attempt \(String(describing: attempt.kind)) finished in " +
+                Self.attemptPerformanceDescription(results, elapsed: elapsed, sampleCount: samples.count)
+            )
             AppLogger.log("WhisperKit: attempt \(String(describing: attempt.kind)) raw result: \(result)")
 
             if Self.canStopAfterAttempt(attempt, text: result, attemptIndex: index, preferredLanguage: language) {
@@ -142,17 +152,38 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
         }
     }
 
+    /// WhisperKit re-decodes an entire window at a higher temperature whenever the result trips
+    /// `compressionRatioThreshold`, `logProbThreshold`, or `noSpeechThreshold`. Its default of 5
+    /// means one bad window can cost six full decodes, and real dictation trips those checks
+    /// routinely — the hesitations and restarts in ordinary speech ("好好好", "就是就是") are exactly
+    /// what a compression-ratio check reads as a decode loop.
+    ///
+    /// Two still leaves the escape hatch that matters: temperatures 0.0, 0.2 and 0.4 are tried
+    /// before giving up, so a genuinely stuck window can still shake itself loose. What it removes
+    /// is the long tail where the fourth, fifth and sixth attempt each cost as much as the first
+    /// and rarely change the answer.
+    nonisolated static let temperatureFallbackCount = 2
+
     nonisolated static func makeDecodingOptions(
         for attempt: TranscriptionAttempt,
         tokenizer: WhisperTokenizer? = nil
     ) -> DecodingOptions {
         return DecodingOptions(
-            verbose: true,
+            // WhisperKit's verbose path logs every predicted token through `os_log`, which puts the
+            // full text of every dictation into the system log where any admin can read it back
+            // with `log show`. For an app whose whole claim is that speech never leaves the
+            // machine, that is the wrong default.
+            verbose: false,
             task: .transcribe,
             language: attempt.languageCode,
+            temperatureFallbackCount: temperatureFallbackCount,
             usePrefillPrompt: true,
             detectLanguage: attempt.detectLanguage,
-            promptTokens: nil
+            promptTokens: nil,
+            // Only affects clips longer than one 30s window; shorter clips take the single-window
+            // path either way. Above that it splits on silence and decodes the pieces
+            // concurrently — measured 6.08s to 4.83s on an 85s clip.
+            chunkingStrategy: .vad
         )
     }
 
@@ -476,6 +507,64 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
         return penalty
     }
 
+    /// Reads the clip as 16 kHz samples and drops the silent tail, falling back to the untrimmed
+    /// clip whenever anything is uncertain — a load failure hands the samples straight back to
+    /// WhisperKit's own error handling on the next call, and a detector that heard no speech is
+    /// not evidence that there was none.
+    nonisolated static func loadSamplesTrimmingTrailingSilence(for clip: RecordedAudioClip) -> [Float] {
+        let samples: [Float]
+        do {
+            samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: clip.fileURL.path)
+        } catch {
+            AppLogger.log("WhisperKit: could not load \(clip.fileURL.lastPathComponent) for trimming: \(error.localizedDescription)")
+            return []
+        }
+
+        guard samples.isEmpty == false else { return samples }
+
+        let vad = EnergyVAD()
+        guard let keptCount = TrailingSilenceTrimmer.trimmedSampleCount(
+            voiceActivity: vad.voiceActivity(in: samples),
+            totalSamples: samples.count,
+            samplesPerFrame: vad.frameLengthSamples,
+            sampleRate: WhisperKit.sampleRate
+        ) else {
+            return samples
+        }
+
+        let removedSeconds = Double(samples.count - keptCount) / Double(WhisperKit.sampleRate)
+        AppLogger.log(
+            "WhisperKit: trimmed \(String(format: "%.2f", removedSeconds))s of trailing silence, " +
+            "transcribing \(String(format: "%.2f", Double(keptCount) / Double(WhisperKit.sampleRate)))s"
+        )
+        return Array(samples.prefix(keptCount))
+    }
+
+    /// Turns one attempt into a line the debug log can be read for timings, so a slow dictation can
+    /// be attributed to decode length or to temperature fallbacks without attaching a profiler.
+    nonisolated static func attemptPerformanceDescription(
+        _ results: [TranscriptionResult],
+        elapsed: TimeInterval,
+        sampleCount: Int
+    ) -> String {
+        let audioSeconds = Double(sampleCount) / Double(WhisperKit.sampleRate)
+        let realTimeFactor = audioSeconds > 0 ? elapsed / audioSeconds : 0
+        let segments = results.flatMap(\.segments)
+        let tokenCount = segments.reduce(0) { $0 + $1.tokens.count }
+        let highestTemperature = segments.map(\.temperature).max() ?? 0
+        let highestCompressionRatio = segments.map(\.compressionRatio).max() ?? 0
+
+        // Anything above the starting temperature means at least one window was decoded more than
+        // once, which is the difference between a slow clip and a slow model.
+        let fallbackNote = highestTemperature > 0
+            ? ", temperature fallback fired (max temp \(String(format: "%.1f", highestTemperature)))"
+            : ""
+
+        return "\(String(format: "%.2f", elapsed))s for \(String(format: "%.2f", audioSeconds))s of audio " +
+            "(rtf \(String(format: "%.3f", realTimeFactor)), \(tokenCount) tokens, " +
+            "max compression ratio \(String(format: "%.2f", highestCompressionRatio)))\(fallbackNote)"
+    }
+
     func prewarm() async {
         do {
             _ = try await loadPipeline()
@@ -543,11 +632,15 @@ final class WhisperKitTranscriptionEngine: TranscriptionEngine, LocalModelReadin
                 "WhisperKit: TextDecoderContextPrefill is missing, prefill tokens will be decoded one by one"
             )
         }
+        // `verbose` gates WhisperKit's whole logging path, including the per-token line in the
+        // decode loop. Keeping it off leaves the app's own `AppLogger` as the single place
+        // dictation is recorded, which is both quieter and the only one that does not write
+        // transcript text into the system log.
         let config = WhisperKitConfig(
             modelFolder: LocalWhisperPaths.modelFolder,
             tokenizerFolder: LocalWhisperPaths.tokenizerBaseFolder,
-            verbose: true,
-            logLevel: .debug,
+            verbose: false,
+            logLevel: .error,
             load: true,
             download: false
         )

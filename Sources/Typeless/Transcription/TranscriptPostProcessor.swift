@@ -121,6 +121,19 @@ enum TranscriptPostProcessor {
         normalized = normalized.replacingOccurrences(of: #"\s+([，。！？：；、,.!?:;])"#, with: "$1", options: .regularExpression)
         normalized = normalized.replacingOccurrences(of: #"([（\(\[]) "#, with: "$1", options: .regularExpression)
         normalized = normalized.replacingOccurrences(of: #" ([）\)\]])"#, with: "$1", options: .regularExpression)
+
+        // Written Chinese has no word spacing, so a space with a Han character on both sides was
+        // never spoken — it is an artifact of where the decoder split the audio. Measured on a
+        // 154s clip: chunked decoding introduced seven of these, unchunked decoding none.
+        //
+        // Both sides have to be Han. A space next to Latin text is doing real work in the mixed
+        // sentences this app exists for ("用 GitHub Action 跑一遍"), and collapsing those would be
+        // a worse defect than the one being fixed.
+        normalized = normalized.replacingOccurrences(
+            of: #"(?<=\p{Han})[ \t]+(?=\p{Han})"#,
+            with: "",
+            options: .regularExpression
+        )
         return normalized
     }
 }
