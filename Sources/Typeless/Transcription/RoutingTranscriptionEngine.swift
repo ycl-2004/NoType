@@ -3,7 +3,7 @@ import Foundation
 /// Sends each dictation to the engine that can actually handle it.
 ///
 /// The routing rule lives in `TranscriptionEngineChoice.resolvedEngine(for:)`: local model choices
-/// are honored for every recognition mode, while macOS Speech falls back to Whisper for mixed
+/// are honored for every recognition mode, while macOS Speech falls back to Qwen3-ASR for mixed
 /// speech because its recognizer is bound to one locale.
 ///
 /// Each model-backed engine is built on first use rather than up front. A user who stays on macOS
@@ -15,10 +15,10 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
 
     private let appState: AppState
     private let makeAppleEngine: () -> TranscriptionEngine?
-    private let makeWhisperEngine: () -> TranscriptionEngine
+    private let makeQwen3ASREngine: () -> TranscriptionEngine
     private let makeSenseVoiceEngine: () -> TranscriptionEngine
     private var appleEngine: TranscriptionEngine?
-    private var whisperEngine: TranscriptionEngine?
+    private var qwen3ASREngine: TranscriptionEngine?
     private var senseVoiceEngine: TranscriptionEngine?
 
     init(
@@ -27,12 +27,12 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
             if #available(macOS 26.0, *) { return AppleSpeechTranscriptionEngine() }
             return nil
         },
-        makeWhisperEngine: @escaping () -> TranscriptionEngine = { WhisperKitTranscriptionEngine() },
+        makeQwen3ASREngine: @escaping () -> TranscriptionEngine = { Qwen3ASRTranscriptionEngine() },
         makeSenseVoiceEngine: @escaping () -> TranscriptionEngine = { SenseVoiceTranscriptionEngine() }
     ) {
         self.appState = appState
         self.makeAppleEngine = makeAppleEngine
-        self.makeWhisperEngine = makeWhisperEngine
+        self.makeQwen3ASREngine = makeQwen3ASREngine
         self.makeSenseVoiceEngine = makeSenseVoiceEngine
     }
 
@@ -54,8 +54,8 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
         )
     }
 
-    /// Warms only the engine the current settings would actually use. Warming both would load the
-    /// bundled Whisper model for users who never reach it.
+    /// Warms only the engine the current settings would actually use. Warming both would load a
+    /// large local model for users who never reach it.
     func prewarm() async {
         let choice = appState.selectedTranscriptionEngine.resolvedEngine(
             for: appState.selectedRecognitionLanguage
@@ -69,20 +69,20 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
         case .appleSpeech:
             if let appleEngine { return appleEngine }
             guard let created = makeAppleEngine() else {
-                // Only reachable if the availability check and the factory disagree; Whisper is
-                // always a working answer, so fall through rather than fail the dictation.
-                AppLogger.log("Routing: macOS Speech unavailable, falling back to the bundled model")
-                return engine(for: .bundledWhisper)
+                // Only reachable if the availability check and the factory disagree; Qwen3-ASR is
+                // always a working local answer, so fall through rather than fail the dictation.
+                AppLogger.log("Routing: macOS Speech unavailable, falling back to Qwen3-ASR")
+                return engine(for: .qwen3ASR)
             }
             bindReadiness(of: created)
             appleEngine = created
             return created
 
-        case .bundledWhisper:
-            if let whisperEngine { return whisperEngine }
-            let created = makeWhisperEngine()
+        case .qwen3ASR:
+            if let qwen3ASREngine { return qwen3ASREngine }
+            let created = makeQwen3ASREngine()
             bindReadiness(of: created)
-            whisperEngine = created
+            qwen3ASREngine = created
             return created
 
         case .senseVoice:

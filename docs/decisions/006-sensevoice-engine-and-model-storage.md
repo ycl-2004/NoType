@@ -1,6 +1,8 @@
 # ADR-006: Add SenseVoice as a Shared Optional Local Engine
 
-- Status: Accepted
+- Status: Accepted; the Whisper comparison it was written against is superseded by
+  [ADR-008](008-qwen3-asr-replaces-whisper.md), which replaced Whisper with Qwen3-ASR. SenseVoice
+  itself is unchanged, and the storage layout established here is what Qwen3-ASR now follows.
 - Date: 2026-09-09
 
 ## Context

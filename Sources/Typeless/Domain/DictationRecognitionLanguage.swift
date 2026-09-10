@@ -27,17 +27,6 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
         }
     }
 
-    var whisperLanguageCode: String? {
-        switch self {
-        case .mixed:
-            nil
-        case .english:
-            "en"
-        case .chinese:
-            "zh"
-        }
-    }
-
     var menuBarMarker: String {
         switch self {
         case .mixed:

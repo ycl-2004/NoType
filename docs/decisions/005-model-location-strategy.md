@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-008](008-qwen3-asr-replaces-whisper.md). The search order, the app-bundle
+fallback, and the shared-versus-private install prompt were all Whisper-specific and are gone;
+Qwen3-ASR resolves to one fixed shared directory. The Core ML specialization cost that motivated
+this ADR does not apply to an ONNX model. Kept for that measurement and its reasoning.
 
 ## Date
 

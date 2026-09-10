@@ -1,13 +1,13 @@
 import Foundation
 
 enum DownloadedLocalModel: String, CaseIterable, Equatable {
-    case whisper
+    case qwen3ASR
     case senseVoice
 
     var menuTitle: String {
         switch self {
-        case .whisper:
-            "Whisper"
+        case .qwen3ASR:
+            "Qwen3-ASR 0.6B INT8"
         case .senseVoice:
             "SenseVoice Small"
         }
@@ -15,8 +15,8 @@ enum DownloadedLocalModel: String, CaseIterable, Equatable {
 
     var locationDescription: String {
         switch self {
-        case .whisper:
-            "Downloaded Whisper copies in ~/Documents/huggingface and NoType Application Support"
+        case .qwen3ASR:
+            "The Qwen3-ASR 0.6B INT8 copy in ~/Documents/huggingface/models/k2-fsa"
         case .senseVoice:
             "The SenseVoice copy in ~/Documents/huggingface"
         }
@@ -57,12 +57,8 @@ final class LocalModelManager: LocalModelRemoving {
 
     nonisolated static func managedPaths(for model: DownloadedLocalModel) -> [URL] {
         switch model {
-        case .whisper:
-            // The app's bundle is intentionally excluded. A release bundle may contain Whisper for
-            // offline first use, but a menu action must never mutate the signed app bundle.
-            ModelInstallLocation.allCases.map { location in
-                LocalWhisperPaths.modelFolder(under: location.downloadBase)
-            }
+        case .qwen3ASR:
+            [Qwen3ASRPaths.modelFolder]
         case .senseVoice:
             [SenseVoicePaths.modelFolder]
         }

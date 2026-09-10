@@ -2,9 +2,9 @@ import Foundation
 
 /// Decides how much of the silent tail to drop before a recording reaches the model.
 ///
-/// Whisper pays for silence twice. It pads every input to a 30s window, so trailing room noise is
-/// decoded like any other audio, and that decode is where the sign-off hallucinations tracked as
-/// known issue #2 come from. Trimming the tail removes both costs at once.
+/// An offline recognizer decodes trailing room noise like any other audio, so a silent tail costs
+/// decode time and is where the subtitle sign-offs tracked as known issue #2 came from on the
+/// previous Whisper engine. Trimming the tail removes both costs at once.
 ///
 /// Only the tail is considered. Trimming the head or the middle risks clipping real speech, and
 /// "I spoke and nothing happened" is a far worse failure than a stray closing phrase.

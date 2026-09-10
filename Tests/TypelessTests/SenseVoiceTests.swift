@@ -23,14 +23,14 @@ struct SenseVoicePathTests {
 
     @Test
     func modelManagerTargetsOnlyNoTypeModelFolders() {
-        let whisperPaths = LocalModelManager.managedPaths(for: .whisper)
+        let qwenPaths = LocalModelManager.managedPaths(for: .qwen3ASR)
         let senseVoicePaths = LocalModelManager.managedPaths(for: .senseVoice)
 
         #expect(senseVoicePaths == [SenseVoicePaths.modelFolder])
-        #expect(whisperPaths.isEmpty == false)
-        #expect((whisperPaths + senseVoicePaths).allSatisfy { $0.path.hasPrefix("/") })
-        #expect((whisperPaths + senseVoicePaths).allSatisfy { $0.path.contains("/NoType") || $0.path.contains("/huggingface") })
-        #expect((whisperPaths + senseVoicePaths).allSatisfy { $0.path.contains(".app/Contents") == false })
+        #expect(qwenPaths == [Qwen3ASRPaths.modelFolder])
+        #expect((qwenPaths + senseVoicePaths).allSatisfy { $0.path.hasPrefix("/") })
+        #expect((qwenPaths + senseVoicePaths).allSatisfy { $0.path.contains("/huggingface") })
+        #expect((qwenPaths + senseVoicePaths).allSatisfy { $0.path.contains(".app/Contents") == false })
     }
 }
 

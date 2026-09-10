@@ -169,15 +169,24 @@ final class AppState: ObservableObject {
     }
 
     /// A saved preference for macOS Speech is ignored on a Mac that cannot run it, so moving a
-    /// settings file to an older system degrades to the bundled model instead of failing.
+    /// settings file to an older system degrades to Qwen3-ASR instead of failing. The old
+    /// `bundledWhisper` raw value is migrated so existing installs keep a working local engine.
     private static func loadTranscriptionEngine(from userDefaults: UserDefaults) -> TranscriptionEngineChoice {
-        guard let rawValue = userDefaults.string(forKey: DefaultsKey.transcriptionEngine),
-              let saved = TranscriptionEngineChoice(rawValue: rawValue) else {
+        guard let rawValue = userDefaults.string(forKey: DefaultsKey.transcriptionEngine) else {
             return .defaultChoice
         }
 
+        let saved: TranscriptionEngineChoice?
+        if rawValue == "bundledWhisper" {
+            saved = .qwen3ASR
+        } else {
+            saved = TranscriptionEngineChoice(rawValue: rawValue)
+        }
+
+        guard let saved else { return .defaultChoice }
+
         if saved == .appleSpeech, TranscriptionEngineChoice.isAppleSpeechAvailable == false {
-            return .bundledWhisper
+            return .qwen3ASR
         }
         return saved
     }

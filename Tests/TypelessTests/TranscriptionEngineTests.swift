@@ -11,44 +11,6 @@ struct TranscriptionEngineTests {
     }
 
     @Test
-    func mixedRecognitionDoesNotForceSingleLanguagePrompt() {
-        let options = WhisperKitTranscriptionEngine.makeDecodingOptions(for: .mixed)
-
-        #expect(options.language == nil)
-        #expect(options.usePrefillPrompt == true)
-        #expect(options.detectLanguage == true)
-    }
-
-    @Test
-    func fixedLanguageRecognitionUsesForcedLanguagePrompt() {
-        let options = WhisperKitTranscriptionEngine.makeDecodingOptions(for: .chinese)
-
-        #expect(options.language == "zh")
-        #expect(options.usePrefillPrompt == true)
-        #expect(options.detectLanguage == false)
-    }
-
-    @Test
-    func decodingBoundsTemperatureFallbacksAndChunksLongClips() {
-        // Both settings exist to bound how long a dictation can take. A window that trips
-        // WhisperKit's quality checks is re-decoded from scratch per temperature, and the stock
-        // count of 5 lets one bad window cost six full decodes.
-        for language in [DictationRecognitionLanguage.mixed, .chinese, .english] {
-            let options = WhisperKitTranscriptionEngine.makeDecodingOptions(for: language)
-
-            #expect(options.temperatureFallbackCount == 2)
-            #expect(options.chunkingStrategy == .vad)
-        }
-    }
-
-    @Test
-    func decodingKeepsTranscriptTextOutOfTheSystemLog() {
-        // WhisperKit's verbose path logs every predicted token through os_log, where `log show`
-        // would hand back the text of every dictation.
-        #expect(WhisperKitTranscriptionEngine.makeDecodingOptions(for: .mixed).verbose == false)
-    }
-
-    @Test
     func transcriptResultCanPreserveRawTranscript() {
         let result = TranscriptResult(text: "开会 tomorrow", rawText: "嗯 开会 tomorrow")
 
@@ -57,436 +19,40 @@ struct TranscriptionEngineTests {
     }
 
     @Test
-    func mixedRecognitionPromptMentionsNoTranslationAndCodeSwitching() {
-        let prompt = WhisperKitTranscriptionEngine.mixedPromptText
-
-        #expect(prompt.contains("Do not translate"))
-        #expect(prompt.contains("Chinese and English may appear in the same sentence"))
-        #expect(prompt.contains("不要翻译"))
-        #expect(prompt.contains("同一句里可能同时出现中文和英文"))
-    }
-
-    @Test
-    func mixedRecognitionUsesAutoChineseEnglishAttemptOrder() {
-        let attempts = WhisperKitTranscriptionEngine.transcriptionAttempts(for: .mixed)
-
-        #expect(attempts.map(\.kind) == [.autoDetect, .forcedChinese, .forcedEnglish])
-    }
-
-    @Test
-    func fixedLanguageRecognitionUsesPreferredFallbackAttemptOrder() {
-        let chineseAttempts = WhisperKitTranscriptionEngine.transcriptionAttempts(for: .chinese)
-        let englishAttempts = WhisperKitTranscriptionEngine.transcriptionAttempts(for: .english)
-
-        #expect(chineseAttempts.map(\.kind) == [.forcedChinese, .autoDetect, .forcedEnglish])
-        #expect(englishAttempts.map(\.kind) == [.forcedEnglish, .autoDetect, .forcedChinese])
-    }
-
-    @Test
-    func mixedAutoRecognitionUsesLanguageDetectionWithoutPromptTokens() throws {
-        let attempt = try #require(WhisperKitTranscriptionEngine.transcriptionAttempts(for: .mixed).first)
-        let options = WhisperKitTranscriptionEngine.makeDecodingOptions(for: attempt)
-
-        #expect(options.language == nil)
-        #expect(options.usePrefillPrompt == true)
-        #expect(options.detectLanguage == true)
-        #expect(options.promptTokens == nil)
-    }
-
-    @Test
-    func fixedLanguagePromptMentionsMixedTermsWithoutTranslation() {
-        let chinesePrompt = WhisperKitTranscriptionEngine.promptText(
-            for: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false)
+    func qwen3ASRUsesTheOfficialOfflineInt8Configuration() {
+        #expect(Qwen3ASRTranscriptionEngine.sampleRate == 16_000)
+        #expect(Qwen3ASRTranscriptionEngine.featureDimension == 80)
+        #expect(Qwen3ASRTranscriptionEngine.executionProvider == "cpu")
+        // Above the official default of 512, which measured correct for a 31s clip but leaves no
+        // headroom for a denser one. `AudioChunker` keeps every decode well inside this budget, so
+        // raising it is margin rather than an attempt to decode a long recording in one pass —
+        // that does not work at any setting. See ADR-008.
+        #expect(Qwen3ASRTranscriptionEngine.maxTotalLength == 1024)
+        #expect(Qwen3ASRTranscriptionEngine.maxNewTokens == 512)
+        #expect(
+            Qwen3ASRTranscriptionEngine.maxTotalLength > Qwen3ASRTranscriptionEngine.maxNewTokens,
+            "Output tokens share the total budget with the audio, so a maxNewTokens at or above maxTotalLength is a ceiling that can never be reached."
         )
-        let englishPrompt = WhisperKitTranscriptionEngine.promptText(
-            for: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false)
-        )
-
-        #expect(chinesePrompt.contains("technical terms"))
-        #expect(chinesePrompt.contains("不要翻译"))
-        #expect(englishPrompt.contains("Chinese words"))
-        #expect(englishPrompt.contains("Do not translate"))
     }
 
     @Test
-    func fixedLanguageRecognitionCurrentlyLeavesPromptTokensDisabled() {
-        let chineseOptions = WhisperKitTranscriptionEngine.makeDecodingOptions(for: .chinese)
-        let englishOptions = WhisperKitTranscriptionEngine.makeDecodingOptions(for: .english)
-
-        #expect(chineseOptions.promptTokens == nil)
-        #expect(englishOptions.promptTokens == nil)
+    func qwen3ASRModelPathsMatchTheOfficialArchiveLayout() {
+        #expect(Qwen3ASRPaths.modelPackageName == "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25")
+        #expect(Qwen3ASRPaths.archiveFileName == "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2")
+        #expect(Qwen3ASRPaths.convFrontendURL.lastPathComponent == "conv_frontend.onnx")
+        #expect(Qwen3ASRPaths.encoderURL.lastPathComponent == "encoder.int8.onnx")
+        #expect(Qwen3ASRPaths.decoderURL.lastPathComponent == "decoder.int8.onnx")
+        #expect(Qwen3ASRPaths.tokenizerURL.lastPathComponent == "tokenizer")
+        #expect(Qwen3ASRPaths.modelFolder.path.contains("/models/k2-fsa/"))
     }
 
     @Test
-    func whitespaceOnlyTranscriptTriggersRetryOnlyForAutoMode() {
-        #expect(WhisperKitTranscriptionEngine.shouldRetryAfterTranscriptionResult("   \n\t") == true)
-        #expect(WhisperKitTranscriptionEngine.shouldRetryAfterTranscriptionResult("") == true)
-        #expect(WhisperKitTranscriptionEngine.shouldRetryAfterTranscriptionResult("Hello 你好") == false)
-    }
+    func audioEnergyVADDetectsSpeechFrames() {
+        let vad = AudioEnergyVAD()
+        let silence = [Float](repeating: 0, count: vad.frameLengthSamples)
+        let speech = [Float](repeating: 0.1, count: vad.frameLengthSamples)
 
-    @Test
-    func chineseModeStopsAfterFirstForcedChineseAttempt() {
-        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-            text: "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說",
-            attemptIndex: 0,
-            preferredLanguage: .chinese
-        )
-
-        #expect(stop == true)
-    }
-
-    @Test
-    func chineseModeKeepsGoingWhenForcedChineseReturnsEnglishTranslation() {
-        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-            text: "I want to send a message to Amy in Slack and share the update with her",
-            attemptIndex: 0,
-            preferredLanguage: .chinese
-        )
-
-        #expect(stop == false)
-    }
-
-    @Test
-    func englishModeStopsAfterFirstForcedEnglishAttempt() {
-        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-            text: "Can you send Amy the update tomorrow",
-            attemptIndex: 0,
-            preferredLanguage: .english
-        )
-
-        #expect(stop == true)
-    }
-
-    @Test
-    func englishModeKeepsGoingWhenForcedEnglishReturnsChineseTranslation() {
-        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-            text: "你可以明天把更新發給她並且順便同步一下進度嗎",
-            attemptIndex: 0,
-            preferredLanguage: .english
-        )
-
-        #expect(stop == false)
-    }
-
-    @Test
-    func mixedModeStopsImmediatelyOnCodeSwitchedAutoDetectResult() {
-        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-            text: "我想在 Slack 发个 message 给 Amy about the Figma file",
-            attemptIndex: 0,
-            preferredLanguage: .mixed
-        )
-
-        #expect(stop == true)
-    }
-
-    @Test
-    func mixedModeStopsImmediatelyOnChineseOnlyAutoDetectResult() {
-        let stop = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-            text: "我明天想開會然後跟團隊同步一下進度",
-            attemptIndex: 0,
-            preferredLanguage: .mixed
-        )
-
-        #expect(stop == true)
-    }
-
-    @Test
-    func mixedModeVerifiesEnglishOnlyAutoDetectResultExactlyOnce() {
-        let englishOnly = "Can you send Amy the update tomorrow"
-
-        let stopAfterAutoDetect = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-            text: englishOnly,
-            attemptIndex: 0,
-            preferredLanguage: .mixed
-        )
-        let stopAfterForcedChinese = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-            text: "你可以明天把更新发给 Amy 吗",
-            attemptIndex: 1,
-            preferredLanguage: .mixed
-        )
-
-        #expect(stopAfterAutoDetect == false)
-        #expect(stopAfterForcedChinese == true)
-    }
-
-    @Test
-    func conversationalWordRepetitionStillStopsTheAttemptChain() {
-        // Observed in a real dictation: saying "OK OK" was treated as a decode loop and cost two
-        // extra attempts even though the transcript was already correct.
-        let repeatedTwice = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-            text: "OK OK 现在好吗",
-            attemptIndex: 0,
-            preferredLanguage: .chinese
-        )
-        let repeatedThreeTimes = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-            text: "no no no we ship tomorrow",
-            attemptIndex: 0,
-            preferredLanguage: .english
-        )
-
-        #expect(repeatedTwice == true)
-        #expect(repeatedThreeTimes == true)
-    }
-
-    @Test
-    func emptyOrLoopingResultNeverStopsTheAttemptChain() {
-        let empty = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-            text: "   \n\t",
-            attemptIndex: 0,
-            preferredLanguage: .chinese
-        )
-        let looping = WhisperKitTranscriptionEngine.canStopAfterAttempt(
-            .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-            text: "so so so so so we ship tomorrow",
-            attemptIndex: 0,
-            preferredLanguage: .english
-        )
-
-        #expect(empty == false)
-        #expect(looping == false)
-    }
-
-    @Test
-    func mixedModeVerificationPathStillSelectsTheFaithfulCandidate() {
-        // Only two attempts run once auto-detect returns English-only, so selection must reach the
-        // same verdict it previously reached with all three candidates present.
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "Can you send Amy the update tomorrow"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "你可以明天把更新发给 Amy 吗"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "Can you send Amy the update tomorrow")
-    }
-
-    @Test
-    func mixedModeVerificationPathRecoversTranslatedChineseSpeech() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "I want to schedule a meeting with Amy tomorrow"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "我明天想 schedule 一个 meeting 给 Amy"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "我明天想 schedule 一个 meeting 给 Amy")
-    }
-
-    @Test
-    func mixedTranscriptScoringPrefersCodeSwitchedText() {
-        let mixedScore = WhisperKitTranscriptionEngine.transcriptScore(
-            "我想 schedule 一个 meeting tomorrow",
-            for: .mixed
-        )
-        let chineseScore = WhisperKitTranscriptionEngine.transcriptScore("我想明天开会", for: .mixed)
-        let englishScore = WhisperKitTranscriptionEngine.transcriptScore("I want a meeting tomorrow", for: .mixed)
-
-        #expect(mixedScore > chineseScore)
-        #expect(mixedScore > englishScore)
-    }
-
-    @Test
-    func mixedTranscriptSelectionChoosesBestScoredCandidate() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true), text: "I want a meeting tomorrow"),
-                .init(attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false), text: "我想 schedule 一个 meeting tomorrow"),
-                .init(attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false), text: "I want schedule meeting")
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "我想 schedule 一个 meeting tomorrow")
-    }
-
-    @Test
-    func mixedTranscriptSelectionPrefersFaithfulMixedOutputOverSmoothEnglishRewrite() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "I want to schedule a meeting with Amy tomorrow"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "我明天想 schedule 一个 meeting 给 Amy"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-                    text: "schedule meeting Amy tomorrow"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "我明天想 schedule 一个 meeting 给 Amy")
-    }
-
-    @Test
-    func mixedTranscriptSelectionKeepsEnglishLedCodeSwitching() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "Can you 帮我 ping 一下 Amy about the launch"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "你可以帮我联系 Amy 关于发布"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-                    text: "Can you help me ping Amy about the launch"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "Can you 帮我 ping 一下 Amy about the launch")
-    }
-
-    @Test
-    func transcriptAnalysisDetectsTranslationStyleEnglishPattern() {
-        let features = WhisperKitTranscriptionEngine.analyzeTranscript(
-            "I want to schedule a meeting tomorrow",
-            attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-            preferredLanguage: .mixed
-        )
-
-        #expect(features.hasTranslationStyleEnglish == true)
-        #expect(features.isMixed == false)
-    }
-
-    @Test
-    func mixedTranscriptSelectionAllowsPureChineseWhenSpeechIsActuallyChinese() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "我明天想开会"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "我明天想开会"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-                    text: "I want to have a meeting tomorrow"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "我明天想开会")
-    }
-
-    @Test
-    func mixedTranscriptSelectionAllowsPureEnglishWhenSpeechIsActuallyEnglish() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "Can you send Amy the update tomorrow"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "你可以明天把更新发给 Amy 吗"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-                    text: "Can you send Amy the update tomorrow"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "Can you send Amy the update tomorrow")
-    }
-
-    @Test
-    func mixedTranscriptSelectionPrefersCandidateThatPreservesProductTerms() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "我想在 Slack 发个 message 给 Amy about the Figma file"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "我想给 Amy 发消息关于那个设计文件"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-                    text: "I want to send Amy a message about the design file"
-                )
-            ],
-            preferredLanguage: .mixed
-        )
-
-        #expect(selected?.text == "我想在 Slack 发个 message 给 Amy about the Figma file")
-    }
-
-    @Test
-    func chineseTranscriptSelectionKeepsCodeSwitchedChineseLead() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false), text: "我想在 Slack 发一个 message 给 Amy"),
-                .init(attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true), text: "I want to send a message to Amy on Slack"),
-                .init(attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false), text: "send message Slack Amy")
-            ],
-            preferredLanguage: .chinese
-        )
-
-        #expect(selected?.text == "我想在 Slack 发一个 message 给 Amy")
-    }
-
-    @Test
-    func chineseFirstModeRejectsEnglishTranslationWhenChineseCandidateExists() {
-        let selected = WhisperKitTranscriptionEngine.selectBestTranscript(
-            from: [
-                .init(
-                    attempt: .init(kind: .forcedChinese, languageCode: "zh", detectLanguage: false),
-                    text: "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說"
-                ),
-                .init(
-                    attempt: .init(kind: .autoDetect, languageCode: nil, detectLanguage: true),
-                    text: "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說"
-                ),
-                .init(
-                    attempt: .init(kind: .forcedEnglish, languageCode: "en", detectLanguage: false),
-                    text: "I want to send a message to Amy in Slack I want to share with her together And also with Zhang Yue杰"
-                )
-            ],
-            preferredLanguage: .chinese
-        )
-
-        #expect(selected?.attempt.kind != .forcedEnglish)
-        #expect(selected?.text == "我想在slack發一個message給Amy說我想跟她在一起然後也跟張玉潔說")
+        #expect(vad.voiceActivity(in: silence + speech) == [false, true])
     }
 
     @Test
@@ -511,7 +77,6 @@ struct TranscriptionEngineTests {
 
     @Test
     func transcriptPostProcessorKeepsLikeYouKnowAndIMeanAsRealWords() {
-        // "I like it" used to come out as "I it".
         #expect(TranscriptPostProcessor.clean("I like it", preferredLanguage: .english) == "I like it")
         #expect(
             TranscriptPostProcessor.clean("I really like this design", preferredLanguage: .english)
@@ -581,7 +146,6 @@ struct TranscriptionEngineTests {
 
     @Test
     func transcriptPostProcessorRemovesSubtitleSignOffHallucination() {
-        // All three shapes were captured from real dictation logs.
         #expect(
             TranscriptPostProcessor.clean(
                 "然后确保所有东西都说有办法好理解的这样子越完整越细节越好谢谢大家",
@@ -608,7 +172,6 @@ struct TranscriptionEngineTests {
 
     @Test
     func transcriptPostProcessorKeepsSignOffWordsThatAreNotAtTheEnd() {
-        // Spoken while reporting the bug itself: the phrase is quoted mid-sentence and must survive.
         let spoken = "他会自动帮我写入一个谢谢大家就这四个字你帮我看一下这是为什么"
 
         #expect(TranscriptPostProcessor.clean(spoken, preferredLanguage: .chinese) == spoken)
@@ -616,19 +179,12 @@ struct TranscriptionEngineTests {
 
     @Test
     func transcriptPostProcessorPreservesStandaloneSignOff() {
-        // Nothing but the hallucination means there is no real speech to keep; deleting it would
-        // silently produce an empty transcript, so it is left for the user to discard.
         #expect(TranscriptPostProcessor.clean("谢谢大家", preferredLanguage: .chinese) == "谢谢大家")
     }
 
     @Test
     func transcriptPostProcessorPreservesStandaloneThankYou() {
-        let cleaned = TranscriptPostProcessor.clean(
-            "Thank you",
-            preferredLanguage: .english
-        )
-
-        #expect(cleaned == "Thank you")
+        #expect(TranscriptPostProcessor.clean("Thank you", preferredLanguage: .english) == "Thank you")
     }
 
     @Test
@@ -652,23 +208,11 @@ struct TranscriptionEngineTests {
 
         #expect(cleaned == "后台开发要先发给Amy确认")
     }
-
-    @Test
-    func localWhisperPathValidationRequiresLargeV3Model() {
-        if LocalWhisperPaths.modelFolderExists {
-            #expect(LocalWhisperPaths.validationError() == nil)
-        } else {
-            #expect(LocalWhisperPaths.validationError()?.contains("Required Whisper model is missing") == true)
-        }
-        #expect(LocalWhisperPaths.modelFolder.contains(LocalWhisperPaths.expectedModelIdentifier))
-    }
 }
 
 struct ChineseSpacingTests {
     @Test
     func chunkBoundarySpacesBetweenHanCharactersAreRemoved() {
-        // Chunked decoding leaves a space where it split the audio. Written Chinese has no word
-        // spacing, so a space with Han on both sides was never spoken.
         let cleaned = TranscriptPostProcessor.clean(
             "我们用的是本地的麦克风输入 采样率是16000赫兹",
             preferredLanguage: .chinese,
@@ -680,7 +224,6 @@ struct ChineseSpacingTests {
 
     @Test
     func spacesAroundLatinTextInMixedSentencesSurvive() {
-        // The whole point of mixed mode. Collapsing these would be worse than the defect above.
         let cleaned = TranscriptPostProcessor.clean(
             "等下我们用 GitHub Action 跑一遍 CI",
             preferredLanguage: .mixed,

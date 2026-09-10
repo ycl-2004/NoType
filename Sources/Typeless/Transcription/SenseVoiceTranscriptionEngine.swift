@@ -1,6 +1,5 @@
 import Foundation
 @preconcurrency import SherpaOnnx
-@preconcurrency import WhisperKit
 
 private final class SenseVoiceRecognizerBox: @unchecked Sendable {
     let recognizer: SherpaOnnxOfflineRecognizer
@@ -46,7 +45,16 @@ final class SenseVoiceTranscriptionEngine: TranscriptionEngine, LocalModelReadin
     ) async throws -> TranscriptResult {
         let languageCode = Self.modelLanguageCode(for: language)
         let recognizer = try await loadRecognizer(languageCode: languageCode)
-        let samples = WhisperKitTranscriptionEngine.loadSamplesTrimmingTrailingSilence(for: clip)
+        let samples: [Float]
+        do {
+            samples = try AudioSamplesLoader.loadSamplesTrimmingTrailingSilence(for: clip)
+        } catch let error as TranscriptionError {
+            throw error
+        } catch {
+            throw TranscriptionError.failed(
+                "Could not load audio for SenseVoice: \(error.localizedDescription)"
+            )
+        }
 
         guard samples.isEmpty == false else {
             AppLogger.log("SenseVoice: audio samples were empty")

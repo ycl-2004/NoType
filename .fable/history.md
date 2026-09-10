@@ -45,7 +45,7 @@ Make NoType's menu bar UI quieter and its activation shortcuts configurable with
 
 ---
 
-# Current Task: Ship WhisperKit Turbo Model Update
+# Completed Task: Ship WhisperKit Turbo Model Update
 
 ## Goal
 
@@ -140,7 +140,7 @@ Ship the Orbit-inspired YC icon and all post-0.2.0 reliability improvements as a
 
 ---
 
-# Current Task: Commit Dictation Robustness Fixes
+# Completed Task: Commit Dictation Robustness Fixes
 
 ## Goal
 
@@ -178,7 +178,7 @@ Review and commit the current dictation robustness changes while ensuring today'
 
 ---
 
-# Current Task: NoType 0.2.0 Documentation Refresh
+# Completed Task: NoType 0.2.0 Documentation Refresh
 
 ## Goal
 

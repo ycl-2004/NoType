@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted, and the routing rule still stands unchanged: macOS Speech is bound to one locale, so mixed
+speech goes to the multilingual local model. Only the identity of that model changed — Whisper was
+replaced by Qwen3-ASR in [ADR-008](008-qwen3-asr-replaces-whisper.md). Read "Bundled Whisper" below
+as "the multilingual local engine". The measurements are from the Whisper era and have not been
+re-run against Qwen3-ASR.
 
 ## Date
 

@@ -11,14 +11,12 @@ let package = Package(
         .executable(name: "noType", targets: ["Typeless"]),
     ],
     dependencies: [
-        .package(path: "Vendor/WhisperKit-main"),
         .package(url: "https://github.com/k2-fsa/sherpa-onnx.git", exact: "1.13.7"),
     ],
     targets: [
         .executableTarget(
             name: "Typeless",
             dependencies: [
-                .product(name: "WhisperKit", package: "WhisperKit-main"),
                 .product(name: "sherpa-onnx", package: "sherpa-onnx"),
             ],
             path: "Sources/Typeless"

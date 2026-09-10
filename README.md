@@ -13,7 +13,7 @@
   <a href="https://github.com/ycl-2004/NoType/releases"><img src="https://img.shields.io/github/downloads/ycl-2004/NoType/total?label=downloads&color=111111" alt="Total downloads"></a>
   <img src="https://img.shields.io/badge/macOS-15.0%2B-111111?logo=apple&logoColor=white" alt="macOS 15.0 or later">
   <img src="https://img.shields.io/badge/Mac-Apple%20Silicon-111111?logo=apple&logoColor=white" alt="Apple Silicon Mac">
-  <img src="https://img.shields.io/badge/Swift-WhisperKit%20%C2%B7%20Core%20ML-F05138?logo=swift&logoColor=white" alt="Built with Swift, WhisperKit, and Core ML">
+  <img src="https://img.shields.io/badge/Swift-sherpa--onnx%20%C2%B7%20ONNX%20Runtime-F05138?logo=swift&logoColor=white" alt="Built with Swift, sherpa-onnx, and ONNX Runtime">
 </p>
 
 <p align="center">
@@ -35,12 +35,13 @@ the result back into the app you were using.
 Three on-device engines are available, and NoType picks between them per dictation:
 
 - **macOS Speech** (macOS 26 or later) uses the on-device recognizer built into
-  the system. It is roughly an order of magnitude faster than the bundled model,
+  the system. It is roughly an order of magnitude faster than a local model,
   never translates, and never invents subtitle sign-offs — but it transcribes one
   chosen language at a time.
-- **Bundled Whisper** ships inside the app as the multilingual `large-v3` model
-  and its tokenizer. It detects the spoken language on its own, which is what
-  makes mixed Chinese-and-English dictation work.
+- **Qwen3-ASR 0.6B INT8** is the multilingual local model, run through
+  sherpa-onnx. It detects the spoken language on its own, which is what makes
+  mixed Chinese-and-English dictation work. It is downloaded once into the shared
+  `~/Documents/huggingface/models/k2-fsa` folder when you first use it.
 - **SenseVoice Small** is an optional local ONNX model for Chinese, Cantonese,
   English, Japanese, and Korean. It is downloaded once into the shared
   `~/Documents/huggingface/models/k2-fsa` folder when you select it.
@@ -50,7 +51,7 @@ transcription API.
 
 ## Quick start
 
-1. **[Download `NoType-0.3.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.3.0-arm64.zip)** and unzip it. The archive is about 1.4 GB because the local speech model is included.
+1. **[Download `NoType-0.3.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.3.0-arm64.zip)** and unzip it. No speech model is bundled — the app downloads one on first use.
 2. Move `NoType.app` to `/Applications`. On first launch, Control-click the app and choose **Open** — the current build is ad-hoc signed and not yet Apple-notarized.
 3. Allow **Microphone** access for recording and **Accessibility** access for global shortcuts and direct text insertion. On macOS 26 or later, also allow **Speech Recognition** so NoType can use the system's on-device recognizer.
 
@@ -59,15 +60,13 @@ again to stop, transcribe, and insert the result.
 
 Preparation depends on which engine the current settings use. macOS Speech
 downloads a system language model the first time a language is used, which takes
-seconds. Whisper needs Core ML to specialize the model for this Mac, which takes
-a few minutes the first time a given copy of the model is used. SenseVoice
-downloads its roughly 230 MB ONNX archive on first use if it is not already in
-the shared Hugging Face folder. If no Whisper model is installed at all, NoType
-asks where to download it first. Open **NoType →
-Diagnostics** to see **Speech Model: Preparing**, **Ready**, or **Failed** without
-reading the debug log. Completed Whisper specialization is cached across app
-launches and Mac restarts. Use **Engine → Manage Downloaded Models** to remove
-NoType's downloaded Whisper or SenseVoice copies when you no longer need them.
+seconds. Qwen3-ASR downloads its roughly 1 GB ONNX archive on first use, and
+SenseVoice its roughly 230 MB one, if they are not already in the shared Hugging
+Face folder. Open **NoType → Diagnostics** to see **Speech Model: Preparing**,
+**Ready**, or **Failed** without reading the debug log. A downloaded model is
+shared across NoType builds and stays put when you replace the app. Use **Engine
+→ Manage Downloaded Models** to remove NoType's downloaded Qwen3-ASR or
+SenseVoice copies when you no longer need them.
 
 If Control-click → **Open** is unavailable, clear the quarantine flag:
 
@@ -80,7 +79,7 @@ open /Applications/NoType.app
 
 - Apple Silicon Mac (`arm64`)
 - macOS 15.0 or later; **macOS 26 or later** to use the macOS Speech engine
-- About 4 GB of free space during download and extraction
+- About 3 GB of free space for the app and one downloaded local model
 - Microphone permission for recording
 - Accessibility permission for global keyboard shortcuts and direct insertion
 - Speech Recognition permission for the macOS Speech engine (macOS 26 or later)
@@ -89,8 +88,8 @@ open /Applications/NoType.app
 
 - **Your voice stays on your Mac.** All three engines run on-device; temporary recordings are deleted after each attempt.
 - **Chinese and English can share a sentence.** Auto mixed recognition is designed for code-switching, with Chinese-first and English-first modes when you want a stronger bias.
-- **Speed where it is available.** On macOS 26, single-language dictation goes through the system recognizer and finishes in a fraction of the time the bundled model needs.
-- **Choose the trade-off.** The release contains Whisper for offline first use; SenseVoice can be added on demand and reused from the shared Hugging Face folder.
+- **Speed where it is available.** On macOS 26, single-language dictation goes through the system recognizer and finishes in a fraction of the time a local model needs.
+- **Choose the trade-off.** Qwen3-ASR and SenseVoice are both downloaded on demand and reused from the shared Hugging Face folder, so the app itself stays small.
 - **It returns to the right place.** NoType remembers the focused input where dictation began. If that target changes, it keeps the transcript on the clipboard instead of inserting into the wrong field.
 - **It stays out of the way.** No windows are required for normal use; status, modes, permissions, shortcuts, and diagnostics live in the menu bar.
 
@@ -106,12 +105,12 @@ open /Applications/NoType.app
 
 **Engine**
 
-- Choose **macOS Speech (fast)**, **Bundled Whisper**, or **SenseVoice Small** from the menu bar; the choice persists across launches.
-- **Auto (中英混说)** uses the selected local model. If macOS Speech is selected, the menu shows the mixed-language override as `macOS Speech → Bundled Whisper`.
+- Choose **macOS Speech (fast)**, **Qwen3-ASR 0.6B INT8**, or **SenseVoice Small** from the menu bar; the choice persists across launches.
+- **Auto (中英混说)** uses the selected local model. If macOS Speech is selected, the menu shows the mixed-language override as `macOS Speech → Qwen3-ASR 0.6B INT8`.
 - 中文优先 and 英文优先 honour the selected engine.
-- On macOS 15 the choice is unavailable and everything uses the bundled model.
+- On macOS 15 the choice is unavailable and everything uses Qwen3-ASR.
 - A local model is loaded only when a dictation actually needs it, so staying on macOS Speech avoids both local model startup costs.
-- **Manage Downloaded Models** appears under the engine menu. It removes only NoType's exact Whisper and SenseVoice download folders after confirmation; macOS Speech assets are left to macOS.
+- **Manage Downloaded Models** appears under the engine menu. It removes only NoType's exact Qwen3-ASR and SenseVoice download folders after confirmation; macOS Speech assets are left to macOS.
 
 **Recognition**
 
@@ -145,11 +144,11 @@ open /Applications/NoType.app
 Open the menu-bar icon to change the engine, recognition mode, Chinese script,
 output behavior, shortcuts, or permissions.
 
-| Recognition mode | macOS Speech selected | Bundled Whisper selected | SenseVoice Small selected |
+| Recognition mode | macOS Speech selected | Qwen3-ASR selected | SenseVoice Small selected |
 | --- | --- | --- | --- |
-| Auto (中英混说) | Bundled Whisper | Bundled Whisper | SenseVoice Small |
-| 中文优先 | macOS Speech | Bundled Whisper | SenseVoice Small |
-| 英文优先 | macOS Speech | Bundled Whisper | SenseVoice Small |
+| Auto (中英混说) | Qwen3-ASR 0.6B INT8 | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
+| 中文优先 | macOS Speech | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
+| 英文优先 | macOS Speech | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
 
 Shortcuts are configured under **Shortcuts** in the menu bar. Choose **Add Shortcut…** to record a regular key, any combination of Command, Option, Control, Shift, and Fn, or a modifier by itself. Each action can have multiple shortcuts, and each shortcut can respond to one press or two quick presses.
 
@@ -162,9 +161,9 @@ The defaults are:
 
 ## Privacy
 
-- Speech recognition runs locally, either through WhisperKit/Core ML, sherpa-onnx, or the on-device recognizer built into macOS.
+- Speech recognition runs locally, either through sherpa-onnx and the ONNX Runtime or the on-device recognizer built into macOS.
 - NoType does not use a remote transcription API.
-- The release build does not download Whisper at runtime. SenseVoice downloads its own model only when selected. The macOS Speech engine may ask macOS to install a system language model the first time a language is used; that model is managed by macOS, shared with every app, and stored outside the app bundle.
+- Qwen3-ASR and SenseVoice each download their own model, once, only when selected, and only from the official sherpa-onnx release archive. The macOS Speech engine may ask macOS to install a system language model the first time a language is used; that model is managed by macOS, shared with every app, and stored outside the app bundle. No audio is ever uploaded.
 - Temporary audio is removed after transcription succeeds or fails.
 - There are no accounts, analytics, or telemetry in the app.
 - Microphone access is used only for active dictation.
@@ -179,11 +178,13 @@ release.
 
 | Artifact | Purpose |
 | --- | --- |
-| `NoType-0.3.0-arm64.zip` | Ready-to-run app with the Whisper model and tokenizer included |
+| `NoType-0.3.0-arm64.zip` | Ready-to-run app; the speech model is downloaded on first use |
 | `NoType-0.3.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
 
-The app is approximately 1.5 GB after extraction. The model is distributed as a
-GitHub Release asset and is intentionally not committed to this repository.
+Speech models are not committed to this repository and are no longer bundled in
+the archive. NoType fetches one from the official sherpa-onnx release on first
+use. `0.3.0` predates that change and still ships with the model included; see
+the [changelog](CHANGELOG.md) for what changed since.
 
 ## FAQ
 
@@ -197,53 +198,47 @@ command shown in [Quick start](#quick-start).
 </details>
 
 <details>
-<summary>Why can the first launch take a minute or two?</summary>
+<summary>Why can the first dictation take a while?</summary>
 
-The model is bundled, so NoType does not download anything. Core ML may still
-specialize the model for the current Mac the first time that model and compute
-configuration are used. NoType keeps running while this happens and shows the
-real state under **Diagnostics → Speech Model**. Once Ready, the completed Core ML
-cache normally survives app launches and Mac restarts. An OS update, model
-change, app-bundle replacement, compute-configuration change, low-disk cleanup,
-or manual cache removal can require specialization again.
+The first time you use a local engine, NoType downloads its model — roughly 1 GB
+for Qwen3-ASR, roughly 230 MB for SenseVoice. NoType keeps running while this
+happens and shows the real state under **Diagnostics → Speech Model**. The
+download goes into `~/Documents/huggingface/models/k2-fsa`, so it is shared
+across NoType builds and is not repeated when you replace the app. After that,
+loading the model takes seconds.
 
 </details>
 
 <details>
-<summary>Why is the download so large?</summary>
+<summary>How much will NoType actually download?</summary>
 
-NoType includes the Whisper `large-v3` `_turbo` Core ML package and its tokenizer.
-The package includes an optional decoder-prefill model that reduces startup
-decoding work. This makes the archive much larger, but it also means
-transcription works locally on first launch without downloading a model or
-sending speech to a server.
+The app itself is small. A local engine adds its model the first time you use it:
+roughly 1 GB for Qwen3-ASR 0.6B INT8, roughly 230 MB for SenseVoice Small. You
+only pay for the engines you actually select, the download happens once per Mac
+rather than once per app version, and nothing is downloaded at all if you stay on
+macOS Speech. The trade is that a brand-new install needs a network connection
+before its first local dictation; every dictation after that is fully offline.
 
 </details>
 
 <details>
 <summary>Where do local models get stored, and can I remove them?</summary>
 
-NoType looks for the model in three places, in this order:
+Both local models live under one shared folder, at one fixed path each:
 
-1. `~/Documents/huggingface/…` — shared with other WhisperKit apps
-2. `~/Library/Application Support/NoType/…` — private to NoType
-3. inside `NoType.app` itself — only present in a release that bundles it
+```text
+~/Documents/huggingface/models/k2-fsa/
+  sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/
+  sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17/
+```
 
-If none of them has it, NoType asks where to put it before downloading, so a
-1.5 GB file never lands somewhere you did not choose. Pick the shared folder if
-you run other WhisperKit tools and would rather not keep two copies; pick
-NoType's own folder if you want the model removed when you delete the app.
+NoType never creates a second copy in Application Support or inside the app
+bundle, so replacing the app leaves your downloads alone and a development
+machine keeps one copy rather than one per build.
 
-Install locations are searched **before** the copy inside the app, so a model you
-downloaded stays in use across app updates — and keeps its Core ML specialization
-cache, which is what makes launches take seconds instead of minutes.
-
-SenseVoice uses one fixed path:
-`~/Documents/huggingface/models/k2-fsa/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17`.
-NoType does not create a second SenseVoice copy in Application Support or the app
-bundle. **Engine → Manage Downloaded Models** removes the exact downloaded
-Whisper and SenseVoice folders after confirmation. It does not remove macOS
-Speech assets, the signed app bundle, or unrelated Hugging Face models.
+**Engine → Manage Downloaded Models** removes exactly those two folders after
+confirmation. It does not remove macOS Speech assets, the signed app bundle, or
+unrelated Hugging Face models sitting in the same directory.
 
 </details>
 
@@ -251,11 +246,11 @@ Speech assets, the signed app bundle, or unrelated Hugging Face models.
 <summary>Which engine should I use?</summary>
 
 Leave the engine on **macOS Speech (fast)** if you are on macOS 26. Single-language
-dictation then finishes almost instantly, and Auto still falls back to Whisper on
-its own, so mixed Chinese-and-English speech keeps working.
+dictation then finishes almost instantly, and Auto still falls back to Qwen3-ASR
+on its own, so mixed Chinese-and-English speech keeps working.
 
-Switch to **Bundled Whisper** if you want every mode to use the same engine, if
-you are comparing output quality between the two, or if the system recognizer
+Switch to **Qwen3-ASR 0.6B INT8** if you want every mode to use the same engine,
+if you are comparing output quality between the two, or if the system recognizer
 mishandles vocabulary you use often.
 
 Choose **SenseVoice Small** when you want a smaller optional local model for
@@ -268,14 +263,14 @@ app's longer recordings still need to be measured on your Mac.
 <details>
 <summary>Why does Auto ignore my engine choice?</summary>
 
-Auto asks the engine to work out which language is being spoken. Whisper and
+Auto asks the engine to work out which language is being spoken. Qwen3-ASR and
 SenseVoice can do that. The macOS recognizer is built for one language at a time,
 so forcing Auto through it would apply a single language to the whole recording
 and transliterate the rest — Chinese spoken into an English model comes back as
 pinyin.
 
-NoType routes Auto to Whisper only when macOS Speech is selected and says so in
-the menu: `Engine: macOS Speech (fast) → Bundled Whisper`.
+NoType routes Auto to Qwen3-ASR only when macOS Speech is selected and says so in
+the menu: `Engine: macOS Speech (fast) → Qwen3-ASR 0.6B INT8`.
 
 </details>
 
@@ -300,8 +295,8 @@ still needs Microphone access but does not require direct text insertion.
 
 **Speech Recognition** permission is required only by the macOS Speech engine on
 macOS 26 or later. Recognition still happens on-device; the permission gates
-access to the system recognizer, not a network service. The bundled Whisper
-engine does not use it.
+access to the system recognizer, not a network service. The Qwen3-ASR and
+SenseVoice engines do not use it.
 
 </details>
 
@@ -333,7 +328,6 @@ Requirements:
 - macOS 15.0 or later
 - Apple Silicon for the current release-packaging path
 - Swift 6.1 or a compatible Xcode toolchain
-- A local WhisperKit Core ML model and tokenizer for a self-contained release
 
 Run the test suite:
 
@@ -341,41 +335,29 @@ Run the test suite:
 swift test
 ```
 
-Build a small local app bundle:
+Note that `swift test --filter` is usable again since the vendored WhisperKit
+checkout was removed; it used to break the build outright.
+
+Build a local app bundle:
 
 ```bash
 ./scripts/build_app.sh
 ```
 
-This creates `dist/NoType.app` without copying the large model — about 10 MB
-instead of 1.5 GB.
+This creates `dist/NoType.app`. No model is copied into it — `Qwen3ASRPaths` and
+`SenseVoicePaths` each resolve one fixed directory under
+`~/Documents/huggingface/models/k2-fsa/`, and the app downloads into it on first
+use. Keeping models outside the bundle means replacing the app never moves a
+model path, and a development machine stores one copy rather than one per build.
 
-`LocalWhisperPaths.swift` resolves the model by checking a shared location first
-and the app bundle second:
-
-1. `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930_turbo`
-2. the copy inside `NoType.app/Contents/Resources/`
-
-**The shared location wins even when the bundle has its own copy**, and that
-order is deliberate. Core ML caches its model specialization per model path, so a
-path that moves into a replaced app bundle throws the cache away: a rebuild
-measured 4m13s to reload the model, against 4s when the path held still. Keeping
-the model in one fixed place outside the bundle also means a development machine
-stores one 1.5 GB copy rather than one per build.
-
-Release builds still bundle the model, because an installed copy is what makes
-the app self-contained for someone who has no `~/Documents/huggingface` at all.
-
-Build the self-contained release archive:
+Build the release archive:
 
 ```bash
-WHISPER_MODEL_DIR="/path/to/openai_whisper-large-v3-v20240930_turbo" \
-WHISPER_TOKENIZER_DIR="/path/to/whisper-large-v3" \
 ./scripts/build_release.sh
 ```
 
-The packaging script builds the current checkout, bundles the model and
-tokenizer, signs the whole app bundle, and creates:
+The packaging script builds the current checkout, signs the whole app bundle, and
+creates:
 
 ```text
 dist/NoType.app
@@ -415,9 +397,10 @@ before treating a build as a public, notarized release.
 - macOS 15.0 or later is required.
 - The current public build is ad-hoc signed and not notarized.
 - There is no in-app updater; new versions are installed manually.
-- The release bundle still contains the fixed Whisper `large-v3` model; SenseVoice is downloaded separately when selected.
+- Both local models are downloaded on first use rather than bundled, so a new install needs a network connection before its first local dictation.
+- Qwen3-ASR replaced Whisper recently. Its transcription quality and latency on this app's recordings have not yet been measured on-device against the engine it replaced.
 - SenseVoice supports Chinese, Cantonese, English, Japanese, and Korean. The upstream direct inference path documents a 30-second input limit; NoType's longer-recording path still needs real-device validation.
-- The macOS Speech engine requires macOS 26 or later and cannot detect the spoken language, so Auto uses Whisper when macOS Speech is selected.
+- The macOS Speech engine requires macOS 26 or later and cannot detect the spoken language, so Auto uses Qwen3-ASR when macOS Speech is selected.
 - The macOS Speech engine has no custom-vocabulary list yet, so proper nouns spoken inside another language can be transliterated rather than spelled.
 
 ## Documentation
@@ -425,15 +408,18 @@ before treating a build as a public, notarized release.
 - [Changelog](CHANGELOG.md) — shipped user-facing changes.
 - [Known issues](docs/known-issues.md) — understood limitations and future directions.
 - [ADR-001: Configurable shortcut input](docs/decisions/001-configurable-shortcut-input.md) — the original shortcut design, now superseded.
-- [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md) — why releases bundle the model instead of downloading it at runtime.
-- [ADR-003: Local model readiness](docs/decisions/003-local-model-readiness.md) — why Diagnostics reflects the actual Core ML loading lifecycle without a percentage.
-- [ADR-004: Two-engine routing](docs/decisions/004-two-engine-routing.md) — why the original two engines are kept and why macOS Speech mixed mode uses Whisper.
-- [ADR-005: Model location strategy](docs/decisions/005-model-location-strategy.md) — why install locations are searched before the app bundle, and why a download asks first.
+- [ADR-002: Portable release packaging](docs/decisions/002-portable-release-packaging.md) — why releases originally bundled the model instead of downloading it at runtime. Superseded by ADR-008.
+- [ADR-003: Local model readiness](docs/decisions/003-local-model-readiness.md) — why Diagnostics reports Preparing / Ready / Failed rather than a percentage.
+- [ADR-004: Two-engine routing](docs/decisions/004-two-engine-routing.md) — why the original two engines are kept and why macOS Speech mixed mode uses the multilingual local model.
+- [ADR-005: Model location strategy](docs/decisions/005-model-location-strategy.md) — why install locations were searched before the app bundle, and why a download asked first. Superseded by ADR-008.
 - [ADR-006: SenseVoice engine and model storage](docs/decisions/006-sensevoice-engine-and-model-storage.md) — why SenseVoice is additive, where its one shared model lives, and why model deletion cannot touch macOS Speech.
 - [ADR-007: User-recorded shortcuts](docs/decisions/007-user-recorded-shortcuts.md) — how arbitrary shortcuts, left/right modifiers, multiple bindings, and defaults work.
+- [ADR-008: Qwen3-ASR replaces Whisper](docs/decisions/008-qwen3-asr-replaces-whisper.md) — why the local engine changed, why no model is bundled any more, and what is still unmeasured.
 
 ## Third-party terms
 
-NoType uses WhisperKit. Its license is included at
-[`Vendor/WhisperKit-main/LICENSE`](Vendor/WhisperKit-main/LICENSE). SenseVoice
-uses the sherpa-onnx Swift package and its ONNX runtime dependency.
+Both local engines run through the
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) Swift package and its ONNX
+Runtime dependency, and use model archives published by the sherpa-onnx project:
+Qwen3-ASR 0.6B INT8 and SenseVoice Small. Earlier versions of NoType used
+WhisperKit, which is no longer a dependency.
