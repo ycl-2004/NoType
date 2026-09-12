@@ -67,6 +67,8 @@ Deliver the approved A layout in the native app, driven by real microphone level
   from 0 to 5 seconds, with 0 hiding that result category.
 - Added validation for decimal and comma-decimal input, bounds, invalid input, menu labels, and
   recognition language copy. The full suite passed after this change.
+- Requirement 11 complete: commit `3bf24d8` (`feat: add configurable voice overlay`) was pushed
+  successfully to `origin/feat/new_models`.
 
 ## Verification limits
 - Microphone input is wired to the real AVAudioRecorder API; pipeline tests use a metered stub.
