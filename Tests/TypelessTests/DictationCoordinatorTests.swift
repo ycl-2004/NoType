@@ -48,6 +48,7 @@ struct DictationCoordinatorTests {
         #expect(clipboard.text == "something the user copied earlier")
         #expect(appState.dictationState == .idle)
         #expect(appState.statusText == "Nothing to insert")
+        #expect(appState.voiceOverlayStatus == .noSpeech)
         #expect(appState.lastError == nil)
     }
 
@@ -270,6 +271,7 @@ struct DictationCoordinatorTests {
         await coordinator.toggleDictation()
 
         #expect(appState.dictationState == .error(.accessibilityPermissionRequired))
+        #expect(appState.voiceOverlayStatus == .insertionFailed)
         #expect(accessibilityManager.prompted == true)
     }
 
@@ -297,6 +299,7 @@ struct DictationCoordinatorTests {
         #expect(appState.dictationState == .idle)
         #expect(fallback.pastedText == "Hello 你好")
         #expect(clipboardStore.text == "Hello 你好")
+        #expect(appState.voiceOverlayStatus == .inserted)
     }
 
     @Test
@@ -481,6 +484,7 @@ struct DictationCoordinatorTests {
         #expect(clipboardStore.text == "Hello 你好")
         #expect(appState.statusText == "Original chat changed, transcript copied")
         #expect(appState.lastDebugMessage == "Original input changed during dictation; transcript copied to clipboard")
+        #expect(appState.voiceOverlayStatus == .copied)
     }
 
     @Test
@@ -503,6 +507,7 @@ struct DictationCoordinatorTests {
         await coordinator.toggleDictation()
 
         #expect(appState.statusText == "Transcript copied")
+        #expect(appState.voiceOverlayStatus == .copied)
     }
 
     @Test
@@ -613,6 +618,60 @@ struct DictationCoordinatorTests {
         #expect(fallback.pastedText == "Hello 你好")
         #expect(fallback.preserveClipboard == false)
         #expect(clipboardStore.text == "Hello 你好")
+    }
+
+    @Test(arguments: [DictationSuccessStatusMode.transcriptCopied, .transcriptInserted])
+    func failedDeliveryReportsTheCorrectShortFeedback(mode: DictationSuccessStatusMode) async throws {
+        let state = makeTestAppState()
+        state.setSuccessStatusMode(mode)
+        let coordinator = DictationCoordinator(
+            appState: state,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: StubAudioRecorder(),
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "test")),
+            focusedTextInserter: FailingFocusedTextInserter(),
+            fallbackTextInserter: FailedDeliveryStore(),
+            clipboardStore: FailedDeliveryStore()
+        )
+        await coordinator.toggleDictation()
+        await coordinator.toggleDictation()
+        #expect(state.voiceOverlayStatus == (mode == .transcriptCopied ? .copyFailed : .insertionFailed))
+        #expect(state.lastError != nil)
+    }
+
+    @Test
+    func meterPipelineTracksVisibilityAndStopsAfterRecording() async throws {
+        let state = makeTestAppState()
+        state.setSuccessStatusMode(.transcriptCopied)
+        state.showsVoiceOverlay = true
+        let recorder = MeteredAudioRecorder()
+        let coordinator = DictationCoordinator(
+            appState: state,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "test")),
+            focusedTextInserter: StubFocusedTextInserter(),
+            clipboardStore: StubClipboardStore()
+        )
+        await coordinator.toggleDictation()
+        for _ in 0..<100 {
+            if state.voiceAudioLevels.last == 0.8 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(state.voiceAudioLevels.last == 0.8)
+        state.showsVoiceOverlay = false
+        for _ in 0..<100 {
+            if await recorder.lastMeteringEnabled == false { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await recorder.lastMeteringEnabled == false)
+        await coordinator.toggleDictation()
+        let reads = await recorder.readCount
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(await recorder.readCount == reads)
+        #expect(state.voiceAudioLevels.allSatisfy { $0 == 0 })
+        #expect(state.voiceOverlayStatus == .copied)
     }
 
     @Test
@@ -914,6 +973,27 @@ private struct FailingFocusedTextInserter: FocusedTextInserter {
 
     func insert(_ text: String, into target: FocusedInputTarget) throws {
         throw InsertionError.unsupportedFocusedElement
+    }
+}
+
+private struct FailedDeliveryStore: ClipboardStoring, FallbackTextInserter {
+    func snapshot() -> ClipboardSnapshot? { nil }
+    func setText(_ text: String) throws { throw InsertionError.pasteFailed }
+    func restore(_ snapshot: ClipboardSnapshot?) throws {}
+    func paste(_ text: String, preserveClipboard: Bool) throws { throw InsertionError.pasteFailed }
+}
+
+private actor MeteredAudioRecorder: AudioRecording {
+    private(set) var lastMeteringEnabled: Bool?
+    private(set) var readCount = 0
+    func startRecording() async throws {}
+    func stopRecording() async throws -> RecordedAudioClip {
+        .init(fileURL: URL(fileURLWithPath: "/tmp/fake.wav"), duration: 1)
+    }
+    func recordingLevel(meteringEnabled: Bool) async -> Double {
+        lastMeteringEnabled = meteringEnabled
+        readCount += 1
+        return meteringEnabled ? 0.8 : 0
     }
 }
 

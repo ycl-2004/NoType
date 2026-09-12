@@ -10,7 +10,7 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
         case .mixed:
             "Auto (中英混说)"
         case .english:
-            "英文优先"
+            "English"
         case .chinese:
             "中文优先"
         }

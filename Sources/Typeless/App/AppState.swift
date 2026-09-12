@@ -9,6 +9,9 @@ final class AppState: ObservableObject {
         static let transcriptionEngine = "transcriptionEngine"
         static let dictationShortcuts = "dictationShortcuts"
         static let recognitionModeShortcuts = "recognitionModeShortcuts"
+        static let showsVoiceOverlay = "showsVoiceOverlay"
+        static let overlaySuccessDuration = "overlaySuccessDuration"
+        static let overlayFailureDuration = "overlayFailureDuration"
     }
 
     private let userDefaults: UserDefaults
@@ -18,6 +21,21 @@ final class AppState: ObservableObject {
     @Published var statusText = "Idle"
     @Published var lastTranscriptPreview: String?
     @Published var lastDebugMessage: String?
+    @Published private(set) var voiceOverlayStatus: VoiceOverlayStatus = .hidden
+    @Published private(set) var voiceAudioLevels: [Double] = Array(repeating: 0, count: 5)
+    @Published private(set) var voiceOverlayTiming: VoiceOverlayTiming {
+        didSet {
+            userDefaults.set(voiceOverlayTiming.successDuration, forKey: DefaultsKey.overlaySuccessDuration)
+            userDefaults.set(voiceOverlayTiming.failureDuration, forKey: DefaultsKey.overlayFailureDuration)
+            onChange?()
+        }
+    }
+    @Published var showsVoiceOverlay: Bool {
+        didSet {
+            userDefaults.set(showsVoiceOverlay, forKey: DefaultsKey.showsVoiceOverlay)
+            onChange?()
+        }
+    }
     @Published private(set) var localModelReadiness: LocalModelReadiness = .waiting
     @Published var selectedRecognitionLanguage: DictationRecognitionLanguage {
         didSet {
@@ -59,6 +77,13 @@ final class AppState: ObservableObject {
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        showsVoiceOverlay = userDefaults.object(forKey: DefaultsKey.showsVoiceOverlay) as? Bool ?? true
+        voiceOverlayTiming = VoiceOverlayTiming(
+            successDuration: userDefaults.object(forKey: DefaultsKey.overlaySuccessDuration) as? Double
+                ?? VoiceOverlayTiming.defaultDuration,
+            failureDuration: userDefaults.object(forKey: DefaultsKey.overlayFailureDuration) as? Double
+                ?? VoiceOverlayTiming.defaultDuration
+        )
         let savedValue = userDefaults.string(forKey: DefaultsKey.recognitionLanguage)
         selectedRecognitionLanguage = DictationRecognitionLanguage(rawValue: savedValue ?? "") ?? .mixed
         let savedChineseScriptPreference = userDefaults.string(forKey: DefaultsKey.chineseScriptPreference)
@@ -75,6 +100,14 @@ final class AppState: ObservableObject {
 
     func update(for state: DictationState) {
         dictationState = state
+        if state != .recording { resetVoiceAudioLevels() }
+        voiceOverlayStatus = switch state {
+        case .idle: .hidden
+        case .recording: .recording
+        case .transcribing: .transcribing
+        case .inserting: selectedSuccessStatusMode == .transcriptCopied ? .copying : .inserting
+        case let .error(error): .failure(error)
+        }
         statusText = switch state {
         case .idle:
             "Idle"
@@ -93,6 +126,30 @@ final class AppState: ObservableObject {
     func setError(_ error: DictationError) {
         lastError = error
         update(for: .error(error))
+    }
+
+    func setVoiceOverlayStatus(_ status: VoiceOverlayStatus) {
+        voiceOverlayStatus = status
+    }
+
+    func setVoiceOverlayDuration(_ seconds: Double, forFailure: Bool) {
+        voiceOverlayTiming = VoiceOverlayTiming(
+            successDuration: forFailure ? voiceOverlayTiming.successDuration : seconds,
+            failureDuration: forFailure ? seconds : voiceOverlayTiming.failureDuration
+        )
+    }
+
+    // Meter updates intentionally bypass onChange: rebuilding the entire menu at 20 Hz
+    // would waste work and could disrupt an open menu.
+    func appendVoiceAudioLevel(_ level: Double) {
+        guard dictationState == .recording, showsVoiceOverlay else { return }
+        let normalized = level.isFinite ? min(1, max(0, level)) : 0
+        voiceAudioLevels = Array(voiceAudioLevels.dropFirst()) + [normalized]
+    }
+
+    func resetVoiceAudioLevels() {
+        guard voiceAudioLevels.contains(where: { $0 != 0 }) else { return }
+        voiceAudioLevels = Array(repeating: 0, count: 5)
     }
 
     func setTranscriptPreview(_ text: String) {

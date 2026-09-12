@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var appState: AppState!
     private(set) var coordinator: DictationCoordinator!
     private var menuBarController: MenuBarController?
+    private var voiceOverlayController: VoiceOverlayController?
     private var dictationShortcutMonitor: ShortcutMonitor?
     private var recognitionModeShortcutMonitor: ShortcutMonitor?
     private var registeredDictationShortcuts: [ShortcutBinding]?
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshShortcutRegistration()
         NSApp.setActivationPolicy(.accessory)
+        voiceOverlayController = VoiceOverlayController(appState: appState)
 
         AudioRecorder.removeOrphanedClips()
         Task { [coordinator] in
@@ -42,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        voiceOverlayController?.close()
         dictationShortcutMonitor?.stop()
         recognitionModeShortcutMonitor?.stop()
     }

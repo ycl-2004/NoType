@@ -1,85 +1,75 @@
-# Current Task: Replace Whisper with Qwen3-ASR INT8
+# Current Task: Optional bottom-center voice overlay
 
 ## Goal
+Deliver the approved A layout in the native app, driven by real microphone levels and dictation outcomes.
 
-Replace the local WhisperKit/Core ML transcription path with the official sherpa-onnx
-Qwen3-ASR 0.6B INT8 offline recognizer for testing, while preserving SwiftPM, local model
-download/install behavior, and the `TranscriptResult` output contract.
+## Requirements (append only)
+1. Dark capsule, thin blue outline, bottom-center placement matching the approved preview.
+2. Immediately show recording for the whole recording; waveform responds to microphone volume.
+3. Show transcription, insertion, copied/inserted outcomes and failures; every status is under five characters.
+4. Persist an on/off setting for the overlay.
+5. Preserve input focus and existing insertion/clipboard behavior.
+6. Verify native appearance, lifecycle, relevant tests, and a distributable local app build.
+7. Added: separately configurable completion and failure duration, default 1.5 seconds, 0–5 seconds; zero hides that category.
+8. Clarified: adjust only result duration; recording appears immediately, no appearance delay.
+9. Added: install the verified update into `/Applications/NoType.app` and restart it.
+10. Added: use English-first menu copy (`English`, `Show Voice Overlay`, and `Overlay Timing`), remove the redundant active-recording helper line, and accept custom 0–5 second result durations.
+11. Added: commit the completed changes and push them to the current GitHub branch.
 
-## Acceptance Criteria
-
-- The local multilingual engine is Qwen3-ASR 0.6B INT8 through the official sherpa-onnx Swift API.
-- The model is downloaded locally from the official sherpa-onnx release archive and validated by
-  its expected files before loading.
-- `TranscriptResult(text:rawText:)`, post-processing, readiness reporting, and local-only behavior
-  remain intact.
-- WhisperKit is no longer a runtime or SwiftPM dependency, and stale Whisper model/install paths
-  are removed from the active app and packaging flow.
-- SenseVoice remains available as its existing optional sherpa-onnx engine.
-- Engine routing, menu labels, model management, and persisted engine choices refer to Qwen3-ASR
-  rather than Whisper.
-- Tests and a release build pass; documentation and changelog describe the new model and its
-  approximate 1 GB download.
-
-## Requirements List (Append Only)
-
-1. Replace the current Whisper local engine with the official sherpa-onnx Qwen3-ASR 0.6B INT8
-   offline model.
-2. Keep the existing Swift implementation surface where practical.
-3. Keep local model download and readiness reporting behavior.
-4. Keep the `TranscriptResult` output protocol and transcript post-processing.
-5. Remove the WhisperKit dependency and active Whisper files/references.
-6. Preserve SenseVoice as a separate optional local engine.
-7. Update tests, user-facing labels, packaging scripts, README, and changelog consistently.
-8. Verify with the repository's documented unfiltered test command and a release build.
-9. Recheck the latest checkout, install the verified app in `/Applications/NoType.app`, then commit and push the current branch.
-
-## Decision Log
-
-- Use sherpa-onnx `1.13.7`, already locked by the package, because its official Swift wrapper
-  exposes `sherpaOnnxOfflineQwen3ASRModelConfig` and the Qwen3-ASR INT8 model layout.
-- Use one Qwen3 recognizer decode per clip. Qwen3-ASR performs multilingual recognition itself;
-  the old Whisper prompt/fallback/scoring chain is model-specific and should not be carried over.
-- Keep the existing shared `~/Documents/huggingface/models/k2-fsa` location used by SenseVoice,
-  adding a Qwen3-specific directory so model deletion remains narrowly scoped.
-- Keep `ModelInstallLocation` only if the active installation flow still needs the user's shared vs
-  private choice; otherwise remove the Whisper-specific choice rather than presenting a false UI.
+## Decisions
+- Use AppKit nonactivating click-through NSPanel and a compact SwiftUI view.
+- Sample AVAudioRecorder meters on its actor; publish levels without rebuilding menus.
+- Separate transient feedback from the dictation state; settings update the existing countdown and never resurrect expired feedback.
+- User screenshot and approved A preview define the design; do not introduce a new visual direction.
+- Prior assistant incorrectly invoked a Superpowers preview despite the user's default ban; continue direct execution and do not extend that workflow.
+- Initial scope was implementation and local build; the user subsequently authorized installation
+  in `/Applications/NoType.app`, then explicitly authorized commit and push.
 
 ## Evidence
+- Apple documentation verified for AVAudioRecorder metering, nonactivating panels, click-through windows, full-screen collection behavior.
+- Previous task record preserved verbatim in history.md.
+- Final unfiltered `swift test`: 146 tests in 23 suites passed
+  in 5.708 seconds on 2026-09-11. Includes delivery outcome feedback, metering visibility,
+  persisted defaults/zero/cap, menu actions, focus preservation, immediate display, expiry while
+  disabled, live timing changes, and cancellation both before and during a previous result's fade.
+- Actual NSHostingView captures opened and visually inspected in `outputs/voice-overlay-qa/`:
+  recording, transcribing, inserted, copied, insertionFailed. Improved processing icon contrast
+  after the first capture; final capture and test run include the updated view.
+- `./scripts/build_app.sh`: release build succeeded (8.91s), asset catalog compiled,
+  and `codesign --verify --deep --strict` passed for `dist/NoType.app`.
+- Build approval was initially blocked by quota on automatic approval review; after the user's
+  continue instruction, the same reviewed local build succeeded. No bypass was used.
 
-- Official sherpa-onnx docs list the Qwen3-ASR 0.6B INT8 archive and its four required model
-  components: `conv_frontend.onnx`, `encoder.int8.onnx`, `decoder.int8.onnx`, and `tokenizer`.
-- The local sherpa-onnx 1.13.7 checkout contains the matching Swift example and wrapper API.
-- Current worktree was clean before this task.
+## Completed — 2026-09-11
+- Requirements 1–8 implemented and verified to the scope above.
+- README, CHANGELOG, known issue #7, and ADR-009 updated.
+- Initial delivery supplied `dist/NoType.app` without replacing the installed version.
 
-## Outstanding
+## Installation follow-up — 2026-09-11
+- Requirement 9 complete: backed up the old installed app at
+  `/private/tmp/notype-before-overlay.TxepGC/NoType.app`; compared it byte-for-byte before replacement.
+- Confirmed the previous process had no recording file open; quit it gracefully before replacing.
+- Signed the new bundle with the user's Apple Development identity (team BQYHJCCRMP),
+  installed it into `/Applications/NoType.app`, and verified exact bundle equality with `dist`.
+- Strict signature verification passed. New installed process PID 29613 is running from
+  `/Applications/NoType.app/Contents/MacOS/noType`.
+- Fresh launch of the updated bundle succeeded with process PID 33111 from
+  `/Applications/NoType.app/Contents/MacOS/noType`. Strict signature verification and exact
+  bundle comparison against `dist/NoType.app` passed. This verifies launch; it does not assert
+  live microphone permissions.
+- Previous version was ad-hoc signed, so the change to developer signing can require renewed
+  macOS permissions. This was disclosed before installation; no permission databases were changed.
 
-- Real-device transcription quality and latency still need measurement after the model is installed.
-  Nothing in this task verified how Qwen3-ASR actually transcribes; the acceptance criteria above
-  cover the swap, not the result.
-- Known issue #11 is worse under Qwen3-ASR and unmeasured: reaching the local model through `Auto`
-  for the first time is now a ~1 GB download rather than a two-second model load.
+## English copy and commit follow-up — 2026-09-11
+- Requirement 10 complete: recognition language now displays `English` while Chinese remains
+  `中文优先`; overlay controls are `Show Voice Overlay` and `Overlay Timing`; the redundant
+  active-recording helper line was removed; completion and failure durations accept custom values
+  from 0 to 5 seconds, with 0 hiding that result category.
+- Added validation for decimal and comma-decimal input, bounds, invalid input, menu labels, and
+  recognition language copy. The full suite passed after this change.
 
-## Completed (2026-09-09)
-
-- Delivery verification: 131 tests in 21 suites passed, including an opt-in real Qwen3
-  production-path transcription using the installed model and its raokouling sample converted
-  to the recorder's 16 kHz mono format. Logs: `/tmp/notype-e2e.log`.
-- `scripts/build_app.sh` passed; app signature verified. Installed bundle matches `dist/NoType.app`
-  byte-for-byte. Installed process started successfully and logged Qwen3 recognizer loaded/model ready.
-- Previous installed app retained at `/private/tmp/notype-installed-backup.lPKHid/NoType.app`.
-- This smoke test establishes successful local inference, not transcription accuracy across all
-  languages or a complete live microphone/shortcut/insertion validation.
-
-- Fixed two dropped string interpolations (`Qwen3ASRPathsTests` expected base path,
-  SenseVoice audio-load error message) — the test failure was the only red in the suite.
-- Removed dead `DictationRecognitionLanguage.whisperLanguageCode` and rewrote the comments that
-  still described Whisper mechanics as current behavior.
-- Removed Whisper bundling from `build_app.sh` and `build_release.sh` (`INCLUDE_MODEL`,
-  `WHISPER_MODEL_DIR`, `WHISPER_TOKENIZER_DIR`). Release builds now start from a clean release
-  directory, because `build_app.sh` copies every `*.bundle` it finds and stale WhisperKit-era
-  bundles were being signed into the app.
-- Deleted `Vendor/WhisperKit-main/` (277 files). This resolved known issue #8 — `swift test --filter`
-  was verified working, followed by a passing unfiltered run.
-- Documented the swap: new ADR-008, ADR-002/005/006 marked superseded, README, CHANGELOG,
-  CLAUDE.md, and `docs/known-issues.md` reconciled with the code that now exists.
+## Verification limits
+- Microphone input is wired to the real AVAudioRecorder API; pipeline tests use a metered stub.
+  Live speech/shortcut/insertion in external apps was not exercised with the new bundle.
+- Multiple-monitor placement was verified with coordinates; full-screen and physical
+  multiple-monitor behavior were configured but not manually exercised.

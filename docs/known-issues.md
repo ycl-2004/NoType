@@ -71,17 +71,18 @@ model adds materially to latency and bundle size. Not a change to make casually.
 
 ## Open: session behaviour
 
-### 7. No history, no in-progress feedback, no cancel, no streaming
+### 7. No history, no cancel, no streaming
 
 - Only `lastTranscriptPreview` survives, truncated to 120 characters. A transcript that is inserted
   into the wrong place or overwritten cannot be recovered.
-- While recording there is no level meter, waveform, or elapsed time, so there is no confirmation
-  that audio is being captured.
+- In-progress feedback is now available through the optional bottom-center voice overlay, with
+  a waveform driven by microphone levels, processing status, and configurable result duration.
+  There is still no elapsed-time display.
 - Recording can only be stopped-and-transcribed. There is no way to abandon a session.
 - Transcription is batch-only; nothing appears until the whole clip is processed.
 
 **Direction.** These are independent features rather than defects. Cancellation is the cheapest and
-probably the most useful of the four.
+probably the most useful of the remaining three.
 
 ---
 

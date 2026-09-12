@@ -107,7 +107,7 @@ open /Applications/NoType.app
 
 - Choose **macOS Speech (fast)**, **Qwen3-ASR 0.6B INT8**, or **SenseVoice Small** from the menu bar; the choice persists across launches.
 - **Auto (中英混说)** uses the selected local model. If macOS Speech is selected, the menu shows the mixed-language override as `macOS Speech → Qwen3-ASR 0.6B INT8`.
-- 中文优先 and 英文优先 honour the selected engine.
+- 中文优先 and English honour the selected engine.
 - On macOS 15 the choice is unavailable and everything uses Qwen3-ASR.
 - A local model is loaded only when a dictation actually needs it, so staying on macOS Speech avoids both local model startup costs.
 - **Manage Downloaded Models** appears under the engine menu. It removes only NoType's exact Qwen3-ASR and SenseVoice download folders after confirmation; macOS Speech assets are left to macOS.
@@ -115,7 +115,7 @@ open /Applications/NoType.app
 **Recognition**
 
 - **Auto (中英混说)** for natural mixed Chinese and English speech.
-- **中文优先** and **英文优先** for language-biased recognition.
+- **中文优先** and **English** for language-biased recognition.
 - Follow-model, Simplified Chinese, or Traditional Chinese output preferences.
 - An optional shortcut cycles recognition modes without opening the menu. It is off by default.
 
@@ -129,6 +129,8 @@ open /Applications/NoType.app
 **Menu bar controls**
 
 - Live idle, recording, transcribing, inserting, and error states.
+- **Show Voice Overlay** toggles a compact, dark capsule at the bottom center of the screen where dictation starts. It appears immediately while recording, responds to microphone volume, and stays visible through transcription without taking keyboard focus.
+- **Overlay Timing** lets you enter separate completion and failure feedback durations from 0 to 5 seconds, defaulting to 1.5 seconds for both. Zero hides that category; recording and transcription remain visible while active. Settings persist and changes apply to the current countdown. Short labels include `输入中…`, `转写中…`, `已插入`, `已复制`, and `插入失败`; detailed errors remain in the menu.
 - Recognition and Chinese-script markers visible in the menu-bar icon.
 - Configurable dictation and recognition-mode shortcuts that persist across launches.
 - Permission status, the latest diagnostic event, and direct access to the local debug log. Logs retain the newest five days and are trimmed whenever NoType logs activity or accesses the log.
@@ -142,13 +144,13 @@ open /Applications/NoType.app
 5. NoType transcribes locally, returns to the captured app, and inserts or copies the transcript according to your selected success mode.
 
 Open the menu-bar icon to change the engine, recognition mode, Chinese script,
-output behavior, shortcuts, or permissions.
+output behavior, overlay visibility and timing, shortcuts, or permissions.
 
 | Recognition mode | macOS Speech selected | Qwen3-ASR selected | SenseVoice Small selected |
 | --- | --- | --- | --- |
 | Auto (中英混说) | Qwen3-ASR 0.6B INT8 | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
 | 中文优先 | macOS Speech | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
-| 英文优先 | macOS Speech | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
+| English | macOS Speech | Qwen3-ASR 0.6B INT8 | SenseVoice Small |
 
 Shortcuts are configured under **Shortcuts** in the menu bar. Choose **Add Shortcut…** to record a regular key, any combination of Command, Option, Control, Shift, and Fn, or a modifier by itself. Each action can have multiple shortcuts, and each shortcut can respond to one press or two quick presses.
 

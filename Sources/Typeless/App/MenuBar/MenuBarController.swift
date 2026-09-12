@@ -74,6 +74,15 @@ final class MenuBarController: NSObject {
         successStatusMenuItem.submenu = successStatusModeMenu()
         menu.addItem(successStatusMenuItem)
 
+        let overlayItem = NSMenuItem(title: "Show Voice Overlay", action: #selector(handleToggleVoiceOverlay), keyEquivalent: "")
+        overlayItem.target = self
+        overlayItem.state = appState.showsVoiceOverlay ? .on : .off
+        menu.addItem(overlayItem)
+
+        let overlayTimingItem = NSMenuItem(title: "Overlay Timing", action: nil, keyEquivalent: "")
+        overlayTimingItem.submenu = voiceOverlayTimingMenu()
+        menu.addItem(overlayTimingItem)
+
         let shortcutsMenuItem = NSMenuItem(title: "Shortcuts", action: nil, keyEquivalent: "")
         shortcutsMenuItem.submenu = shortcutsMenu()
         menu.addItem(shortcutsMenuItem)
@@ -245,6 +254,23 @@ final class MenuBarController: NSObject {
             menu.addItem(item)
         }
 
+        return menu
+    }
+
+    func voiceOverlayTimingMenu() -> NSMenu {
+        let menu = NSMenu()
+        for forFailure in [false, true] {
+            let duration = forFailure ? appState.voiceOverlayTiming.failureDuration : appState.voiceOverlayTiming.successDuration
+            let title = forFailure ? "Failure" : "Completion"
+            let item = NSMenuItem(
+                title: "\(title): \(VoiceOverlayTiming.label(for: duration))…",
+                action: #selector(handleOverlayDurationSelection(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = forFailure ? 1 : 0
+            menu.addItem(item)
+        }
         return menu
     }
 
@@ -514,6 +540,45 @@ final class MenuBarController: NSObject {
         Task { [coordinator] in
             await coordinator.toggleDictation()
         }
+    }
+
+    @objc
+    private func handleToggleVoiceOverlay() {
+        appState.showsVoiceOverlay.toggle()
+    }
+
+    @objc
+    private func handleOverlayDurationSelection(_ sender: NSMenuItem) {
+        let forFailure = sender.tag == 1
+        let title = forFailure ? "Failure feedback" : "Completion feedback"
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = "Enter a duration from 0 to 5 seconds. Use 0 to hide this feedback."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let currentDuration = forFailure ? appState.voiceOverlayTiming.failureDuration : appState.voiceOverlayTiming.successDuration
+        let field = NSTextField(string: VoiceOverlayTiming.inputText(for: currentDuration))
+        field.placeholderString = "0–5"
+        field.alignment = .right
+        field.frame = NSRect(x: 0, y: 0, width: 180, height: 24)
+        alert.accessoryView = field
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+        guard let seconds = VoiceOverlayTiming.parse(field.stringValue) else {
+            let error = NSAlert()
+            error.messageText = "Invalid duration"
+            error.informativeText = "Enter a number from 0 to 5 seconds."
+            error.alertStyle = .warning
+            error.addButton(withTitle: "OK")
+            error.runModal()
+            return
+        }
+        appState.setVoiceOverlayDuration(seconds, forFailure: forFailure)
     }
 
     @objc

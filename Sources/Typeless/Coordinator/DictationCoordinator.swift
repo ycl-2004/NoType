@@ -44,6 +44,7 @@ final class DictationCoordinator {
     private var targetApplication: NSRunningApplication?
     private var targetInput: FocusedInputTarget?
     private var recordingTimeoutTask: Task<Void, Never>?
+    private var audioLevelTask: Task<Void, Never>?
 
     /// `startDictation` awaits a microphone permission check, and the state stays `.idle` for that
     /// whole window. A second shortcut press during it used to start a second session: the first
@@ -52,6 +53,11 @@ final class DictationCoordinator {
     /// audio had been captured, and every further press restarted instead of stopping — the app
     /// could not be recovered without a relaunch.
     private var isHandlingToggle = false
+
+    deinit {
+        audioLevelTask?.cancel()
+        recordingTimeoutTask?.cancel()
+    }
 
     init(
         appState: AppState,
@@ -149,6 +155,7 @@ final class DictationCoordinator {
             appState.setDebugMessage("Starting recorder")
             try await audioRecorder.startRecording()
             appState.update(for: .recording)
+            startAudioLevelUpdates()
             appState.setDebugMessage("Recorder started")
             AppLogger.log("startDictation: recorder started")
             startRecordingTimeout()
@@ -182,6 +189,25 @@ final class DictationCoordinator {
         }
     }
 
+    private func startAudioLevelUpdates() {
+        audioLevelTask?.cancel()
+        let recorder = audioRecorder
+        audioLevelTask = Task { [weak appState] in
+            while !Task.isCancelled {
+                guard let appState, appState.dictationState == .recording else { return }
+                let enabled = appState.showsVoiceOverlay
+                let level = await recorder.recordingLevel(meteringEnabled: enabled)
+                guard !Task.isCancelled else { return }
+                if enabled {
+                    appState.appendVoiceAudioLevel(level)
+                } else {
+                    appState.resetVoiceAudioLevels()
+                }
+                try? await Task.sleep(for: .milliseconds(enabled ? 50 : 200))
+            }
+        }
+    }
+
     private func cancelRecordingTimeout() {
         recordingTimeoutTask?.cancel()
         recordingTimeoutTask = nil
@@ -200,12 +226,15 @@ final class DictationCoordinator {
     private func finishWithoutInserting(statusText: String, debugMessage: String) {
         appState.update(for: .idle)
         appState.statusText = statusText
+        appState.setVoiceOverlayStatus(.noSpeech)
         appState.setDebugMessage(debugMessage)
         AppLogger.log("stopDictation: \(debugMessage)")
     }
 
     private func stopDictation() async {
         cancelRecordingTimeout()
+        audioLevelTask?.cancel()
+        audioLevelTask = nil
         appState.update(for: .transcribing)
         appState.setDebugMessage("Stopping recorder")
         AppLogger.log("stopDictation: stopping recorder")
@@ -247,6 +276,10 @@ final class DictationCoordinator {
             appState.statusText = insertOutcome == .usedSelectedMode
                 ? appState.selectedSuccessStatusMode.statusText
                 : insertOutcome.statusText
+            appState.setVoiceOverlayStatus(
+                insertOutcome == .copiedBecauseTargetChanged || appState.selectedSuccessStatusMode == .transcriptCopied
+                    ? .copied : .inserted
+            )
             appState.setDebugMessage(insertOutcome.debugMessage)
             AppLogger.log("stopDictation: transcript copied or inserted")
         } catch let error as DictationError {
@@ -268,8 +301,17 @@ final class DictationCoordinator {
                 appState.setDebugMessage("Insertion error")
                 AppLogger.log("stopDictation: insertion error \(String(describing: error))")
             }
+            if appState.selectedSuccessStatusMode == .transcriptCopied {
+                appState.setVoiceOverlayStatus(.copyFailed)
+            }
         } catch {
-            appState.setError(.transcriptionFailed(error.localizedDescription))
+            let failedDuringInsertion = appState.dictationState == .inserting
+            appState.setError(failedDuringInsertion
+                ? .insertionFailed(error.localizedDescription)
+                : .transcriptionFailed(error.localizedDescription))
+            if failedDuringInsertion, appState.selectedSuccessStatusMode == .transcriptCopied {
+                appState.setVoiceOverlayStatus(.copyFailed)
+            }
             appState.setDebugMessage("Unexpected error")
             AppLogger.log("stopDictation: unexpected error \(error.localizedDescription)")
         }
