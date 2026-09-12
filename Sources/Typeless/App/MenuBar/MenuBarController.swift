@@ -7,6 +7,7 @@ final class MenuBarController: NSObject {
     private let microphonePermissionManager: MicrophonePermissionManaging
     private let accessibilityPermissionManager: AccessibilityPermissionManaging
     private let permissionSettingsOpener: PermissionSettingsOpening
+    private let localModelManager: LocalModelRemoving
     private let statusItem: NSStatusItem
 
     init(
@@ -14,13 +15,15 @@ final class MenuBarController: NSObject {
         coordinator: DictationCoordinator,
         microphonePermissionManager: MicrophonePermissionManaging = MicrophonePermissionManager(),
         accessibilityPermissionManager: AccessibilityPermissionManaging = AccessibilityPermissionManager(),
-        permissionSettingsOpener: PermissionSettingsOpening = SystemSettingsOpener()
+        permissionSettingsOpener: PermissionSettingsOpening = SystemSettingsOpener(),
+        localModelManager: LocalModelRemoving = LocalModelManager()
     ) {
         self.appState = appState
         self.coordinator = coordinator
         self.microphonePermissionManager = microphonePermissionManager
         self.accessibilityPermissionManager = accessibilityPermissionManager
         self.permissionSettingsOpener = permissionSettingsOpener
+        self.localModelManager = localModelManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         appState.onChange = { [weak self] in
@@ -70,6 +73,15 @@ final class MenuBarController: NSObject {
         let successStatusMenuItem = NSMenuItem(title: "Success Status: \(appState.selectedSuccessStatusMode.menuTitle)", action: nil, keyEquivalent: "")
         successStatusMenuItem.submenu = successStatusModeMenu()
         menu.addItem(successStatusMenuItem)
+
+        let overlayItem = NSMenuItem(title: "Show Voice Overlay", action: #selector(handleToggleVoiceOverlay), keyEquivalent: "")
+        overlayItem.target = self
+        overlayItem.state = appState.showsVoiceOverlay ? .on : .off
+        menu.addItem(overlayItem)
+
+        let overlayTimingItem = NSMenuItem(title: "Overlay Timing", action: nil, keyEquivalent: "")
+        overlayTimingItem.submenu = voiceOverlayTimingMenu()
+        menu.addItem(overlayTimingItem)
 
         let shortcutsMenuItem = NSMenuItem(title: "Shortcuts", action: nil, keyEquivalent: "")
         shortcutsMenuItem.submenu = shortcutsMenu()
@@ -156,8 +168,9 @@ final class MenuBarController: NSObject {
         return menu
     }
 
-    /// Auto silently routes to Whisper whatever the user picked, so the menu says so rather than
-    /// showing a preference the current recognition mode is not honouring.
+    /// Auto silently routes away from macOS Speech because that engine cannot detect the spoken
+    /// language, so the menu says so rather than showing a preference the current mode is not
+    /// honouring.
     private var engineMenuSummary: String {
         let selected = appState.selectedTranscriptionEngine
         let effective = selected.resolvedEngine(for: appState.selectedRecognitionLanguage)
@@ -185,9 +198,43 @@ final class MenuBarController: NSObject {
         menu.addItem(.separator())
 
         let note = TranscriptionEngineChoice.isAppleSpeechAvailable
-            ? "Auto → Whisper"
-            : "Needs macOS 26"
+            ? "Auto uses a multilingual local model"
+            : "Needs macOS 26 for macOS Speech"
         menu.addItem(NSMenuItem(title: note, action: nil, keyEquivalent: ""))
+
+        menu.addItem(.separator())
+        let manageModelsItem = NSMenuItem(title: "Manage Downloaded Models", action: nil, keyEquivalent: "")
+        manageModelsItem.submenu = downloadedModelMenu()
+        menu.addItem(manageModelsItem)
+
+        return menu
+    }
+
+    private func downloadedModelMenu() -> NSMenu {
+        let menu = NSMenu()
+        let canRemove = appState.dictationState == .idle
+
+        for model in DownloadedLocalModel.allCases {
+            let installed = localModelManager.isInstalled(model)
+            let item = NSMenuItem(
+                title: installed ? "Delete \(model.menuTitle)" : "\(model.menuTitle) (not installed)",
+                action: installed ? #selector(handleDeleteDownloadedModel(_:)) : nil,
+                keyEquivalent: ""
+            )
+            item.target = installed ? self : nil
+            item.representedObject = model.rawValue
+            item.isEnabled = installed && canRemove
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+        let locationItem = NSMenuItem(
+            title: "Only NoType downloads are removed",
+            action: nil,
+            keyEquivalent: ""
+        )
+        locationItem.isEnabled = false
+        menu.addItem(locationItem)
 
         return menu
     }
@@ -207,6 +254,23 @@ final class MenuBarController: NSObject {
             menu.addItem(item)
         }
 
+        return menu
+    }
+
+    func voiceOverlayTimingMenu() -> NSMenu {
+        let menu = NSMenu()
+        for forFailure in [false, true] {
+            let duration = forFailure ? appState.voiceOverlayTiming.failureDuration : appState.voiceOverlayTiming.successDuration
+            let title = forFailure ? "Failure" : "Completion"
+            let item = NSMenuItem(
+                title: "\(title): \(VoiceOverlayTiming.label(for: duration))…",
+                action: #selector(handleOverlayDurationSelection(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = forFailure ? 1 : 0
+            menu.addItem(item)
+        }
         return menu
     }
 
@@ -264,7 +328,7 @@ final class MenuBarController: NSObject {
         let menu = NSMenu()
 
         let dictationItem = NSMenuItem(
-            title: "Dictation: \(appState.selectedDictationShortcut.menuTitle)",
+            title: "Dictation: \(appState.dictationShortcutMenuTitle)",
             action: nil,
             keyEquivalent: ""
         )
@@ -272,7 +336,7 @@ final class MenuBarController: NSObject {
         menu.addItem(dictationItem)
 
         let recognitionModeItem = NSMenuItem(
-            title: "Recognition Mode: \(appState.selectedRecognitionModeShortcut.menuTitle)",
+            title: "Recognition Mode: \(appState.recognitionModeShortcutMenuTitle)",
             action: nil,
             keyEquivalent: ""
         )
@@ -284,34 +348,84 @@ final class MenuBarController: NSObject {
 
     private func dictationShortcutMenu() -> NSMenu {
         let menu = NSMenu()
-        for choice in DictationShortcutChoice.allCases {
-            let item = NSMenuItem(
-                title: choice.menuTitle,
-                action: #selector(handleDictationShortcutSelection(_:)),
+        addCurrentShortcutItems(appState.dictationShortcuts, to: menu, actionIdentifier: "dictation")
+
+        let addItem = NSMenuItem(
+            title: "Add Shortcut…",
+            action: #selector(handleAddDictationShortcut),
+            keyEquivalent: ""
+        )
+        addItem.target = self
+        menu.addItem(addItem)
+
+        if appState.dictationShortcuts.isEmpty == false {
+            let disableItem = NSMenuItem(
+                title: "Disable All",
+                action: #selector(handleDisableDictationShortcuts),
                 keyEquivalent: ""
             )
-            item.target = self
-            item.representedObject = choice.rawValue
-            item.state = appState.selectedDictationShortcut == choice ? .on : .off
-            menu.addItem(item)
+            disableItem.target = self
+            menu.addItem(disableItem)
         }
+
         return menu
     }
 
     private func recognitionModeShortcutMenu() -> NSMenu {
         let menu = NSMenu()
-        for choice in RecognitionModeShortcutChoice.allCases {
-            let item = NSMenuItem(
-                title: choice.menuTitle,
-                action: #selector(handleRecognitionModeShortcutSelection(_:)),
+        addCurrentShortcutItems(appState.recognitionModeShortcuts, to: menu, actionIdentifier: "recognition")
+
+        let addItem = NSMenuItem(
+            title: "Add Shortcut…",
+            action: #selector(handleAddRecognitionModeShortcut),
+            keyEquivalent: ""
+        )
+        addItem.target = self
+        menu.addItem(addItem)
+
+        if appState.recognitionModeShortcuts.isEmpty == false {
+            let disableItem = NSMenuItem(
+                title: "Disable All",
+                action: #selector(handleDisableRecognitionModeShortcuts),
                 keyEquivalent: ""
             )
-            item.target = self
-            item.representedObject = choice.rawValue
-            item.state = appState.selectedRecognitionModeShortcut == choice ? .on : .off
-            menu.addItem(item)
+            disableItem.target = self
+            menu.addItem(disableItem)
         }
+
         return menu
+    }
+
+    private func addCurrentShortcutItems(
+        _ shortcuts: [ShortcutBinding],
+        to menu: NSMenu,
+        actionIdentifier: String
+    ) {
+        if shortcuts.isEmpty {
+            let emptyItem = NSMenuItem(title: "No shortcuts set", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            menu.addItem(emptyItem)
+        } else {
+            for (index, shortcut) in shortcuts.enumerated() {
+                let item = NSMenuItem(title: shortcut.menuTitle, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                item.state = .on
+                item.toolTip = "Shortcut \(index + 1)"
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
+            for (index, shortcut) in shortcuts.enumerated() {
+                let item = NSMenuItem(
+                    title: "Remove \(shortcut.menuTitle)",
+                    action: #selector(handleRemoveShortcut(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.tag = index
+                item.representedObject = actionIdentifier
+                menu.addItem(item)
+            }
+        }
     }
 
     func diagnosticsMenu() -> NSMenu {
@@ -319,14 +433,14 @@ final class MenuBarController: NSObject {
 
         let readiness = appState.localModelReadiness
         let modelStatusItem = NSMenuItem(
-            title: "Local Model: \(readiness.menuTitle)",
+            title: "Speech Model: \(readiness.menuTitle)",
             action: nil,
             keyEquivalent: ""
         )
         modelStatusItem.isEnabled = false
         modelStatusItem.image = NSImage(
             systemSymbolName: readiness.symbolName,
-            accessibilityDescription: "Local model \(readiness.menuTitle)"
+            accessibilityDescription: "Speech model \(readiness.menuTitle)"
         )
         menu.addItem(modelStatusItem)
 
@@ -339,7 +453,7 @@ final class MenuBarController: NSObject {
             let oneLineReason = reason.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             let isTruncated = oneLineReason.count > 110
             let reasonItem = NSMenuItem(
-                title: "Reason: \(oneLineReason.prefix(110))\(isTruncated ? "…" : "")",
+                title: "Details: \(oneLineReason.prefix(110))\(isTruncated ? "…" : "")",
                 action: nil,
                 keyEquivalent: ""
             )
@@ -349,7 +463,7 @@ final class MenuBarController: NSObject {
             menu.addItem(reasonItem)
 
             let retryItem = NSMenuItem(
-                title: "Retry Model Preparation",
+                title: "Try Again",
                 action: #selector(handleRetryModelPreparation),
                 keyEquivalent: ""
             )
@@ -360,22 +474,23 @@ final class MenuBarController: NSObject {
         menu.addItem(.separator())
 
         if let lastDebugMessage = appState.lastDebugMessage {
-            let debugItem = NSMenuItem(title: "Last Event: \(lastDebugMessage)", action: nil, keyEquivalent: "")
+            let debugItem = NSMenuItem(title: "Recent Activity: \(lastDebugMessage)", action: nil, keyEquivalent: "")
             debugItem.isEnabled = false
             menu.addItem(debugItem)
             menu.addItem(.separator())
         }
 
         let openLogItem = NSMenuItem(
-            title: "Open Debug Log",
+            title: "View Debug Log",
             action: #selector(handleOpenDebugLog),
             keyEquivalent: ""
         )
         openLogItem.target = self
         menu.addItem(openLogItem)
 
-        let logPathItem = NSMenuItem(title: AppLogger.debugLogURL.path, action: nil, keyEquivalent: "")
+        let logPathItem = NSMenuItem(title: "Log file: notype-debug.log", action: nil, keyEquivalent: "")
         logPathItem.isEnabled = false
+        logPathItem.toolTip = AppLogger.debugLogURL.path
         menu.addItem(logPathItem)
 
         return menu
@@ -389,10 +504,81 @@ final class MenuBarController: NSObject {
     }
 
     @objc
+    private func handleDeleteDownloadedModel(_ sender: NSMenuItem) {
+        guard appState.dictationState == .idle,
+              let rawValue = sender.representedObject as? String,
+              let model = DownloadedLocalModel(rawValue: rawValue),
+              localModelManager.isInstalled(model) else {
+            return
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Delete \(model.menuTitle)?"
+        alert.informativeText = "This removes \(model.locationDescription). macOS Speech assets are not affected."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete Model")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            let removed = try localModelManager.remove(model)
+            guard removed else { return }
+            appState.setLocalModelReadiness(.waiting)
+            appState.setDebugMessage("Deleted \(model.menuTitle) from the NoType model folders")
+        } catch {
+            let errorAlert = NSAlert(error: error)
+            errorAlert.messageText = "Could not delete \(model.menuTitle)"
+            errorAlert.informativeText = "The model files were left in place."
+            errorAlert.runModal()
+        }
+    }
+
+    @objc
     private func handleToggle() {
         Task { [coordinator] in
             await coordinator.toggleDictation()
         }
+    }
+
+    @objc
+    private func handleToggleVoiceOverlay() {
+        appState.showsVoiceOverlay.toggle()
+    }
+
+    @objc
+    private func handleOverlayDurationSelection(_ sender: NSMenuItem) {
+        let forFailure = sender.tag == 1
+        let title = forFailure ? "Failure feedback" : "Completion feedback"
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = "Enter a duration from 0 to 5 seconds. Use 0 to hide this feedback."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let currentDuration = forFailure ? appState.voiceOverlayTiming.failureDuration : appState.voiceOverlayTiming.successDuration
+        let field = NSTextField(string: VoiceOverlayTiming.inputText(for: currentDuration))
+        field.placeholderString = "0–5"
+        field.alignment = .right
+        field.frame = NSRect(x: 0, y: 0, width: 180, height: 24)
+        alert.accessoryView = field
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+        guard let seconds = VoiceOverlayTiming.parse(field.stringValue) else {
+            let error = NSAlert()
+            error.messageText = "Invalid duration"
+            error.informativeText = "Enter a number from 0 to 5 seconds."
+            error.alertStyle = .warning
+            error.addButton(withTitle: "OK")
+            error.runModal()
+            return
+        }
+        appState.setVoiceOverlayDuration(seconds, forFailure: forFailure)
     }
 
     @objc
@@ -439,23 +625,87 @@ final class MenuBarController: NSObject {
     }
 
     @objc
-    private func handleDictationShortcutSelection(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let choice = DictationShortcutChoice(rawValue: rawValue) else {
-            return
-        }
-        appState.setDictationShortcut(choice)
-        appState.setDebugMessage("Dictation shortcut set to \(choice.menuTitle)")
+    private func handleAddDictationShortcut() {
+        guard let shortcut = recordShortcut() else { return }
+        guard canAdd(shortcut, to: "dictation") else { return }
+        appState.addDictationShortcut(shortcut)
+        appState.setDebugMessage("Dictation shortcut added: \(shortcut.menuTitle)")
     }
 
     @objc
-    private func handleRecognitionModeShortcutSelection(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let choice = RecognitionModeShortcutChoice(rawValue: rawValue) else {
-            return
+    private func handleAddRecognitionModeShortcut() {
+        guard let shortcut = recordShortcut() else { return }
+        guard canAdd(shortcut, to: "recognition") else { return }
+        appState.addRecognitionModeShortcut(shortcut)
+        appState.setDebugMessage("Recognition mode shortcut added: \(shortcut.menuTitle)")
+    }
+
+    @objc
+    private func handleRemoveShortcut(_ sender: NSMenuItem) {
+        guard let actionIdentifier = sender.representedObject as? String else { return }
+        if actionIdentifier == "dictation" {
+            appState.removeDictationShortcut(at: sender.tag)
+            appState.setDebugMessage("Dictation shortcut removed")
+        } else if actionIdentifier == "recognition" {
+            appState.removeRecognitionModeShortcut(at: sender.tag)
+            appState.setDebugMessage("Recognition mode shortcut removed")
         }
-        appState.setRecognitionModeShortcut(choice)
-        appState.setDebugMessage("Recognition mode shortcut set to \(choice.menuTitle)")
+    }
+
+    @objc
+    private func handleDisableDictationShortcuts() {
+        appState.disableDictationShortcuts()
+        appState.setDebugMessage("Dictation shortcuts disabled")
+    }
+
+    @objc
+    private func handleDisableRecognitionModeShortcuts() {
+        appState.disableRecognitionModeShortcuts()
+        appState.setDebugMessage("Recognition mode shortcuts disabled")
+    }
+
+    private func recordShortcut() -> ShortcutBinding? {
+        guard let shortcut = ShortcutRecorder.record() else { return nil }
+        if shortcut.isModifierOnly || shortcut.modifiers.isEmpty == false {
+            return shortcut
+        } else {
+            let alert = NSAlert()
+            alert.messageText = "Use \(shortcut.menuTitle) as a shortcut?"
+            alert.informativeText = "A regular key without a modifier can interfere with typing in other apps."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Use Anyway")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() != .alertFirstButtonReturn { return nil }
+        }
+        return shortcut
+    }
+
+    private func canAdd(_ shortcut: ShortcutBinding, to actionIdentifier: String) -> Bool {
+        let currentShortcuts = actionIdentifier == "dictation"
+            ? appState.dictationShortcuts
+            : appState.recognitionModeShortcuts
+        guard currentShortcuts.contains(where: { $0.conflicts(with: shortcut) }) == false else {
+            showShortcutConflict(message: "That shortcut is already assigned to this action.")
+            return false
+        }
+
+        let otherShortcuts = actionIdentifier == "dictation"
+            ? appState.recognitionModeShortcuts
+            : appState.dictationShortcuts
+        guard otherShortcuts.contains(where: { $0.conflicts(with: shortcut) }) == false else {
+            showShortcutConflict(message: "That shortcut is already assigned to the other NoType action.")
+            return false
+        }
+        return true
+    }
+
+    private func showShortcutConflict(message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Shortcut Already Used"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc

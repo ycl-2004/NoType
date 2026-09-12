@@ -7,10 +7,11 @@ final class AppState: ObservableObject {
         static let chineseScriptPreference = "chineseScriptPreference"
         static let successStatusMode = "successStatusMode"
         static let transcriptionEngine = "transcriptionEngine"
-        static let dictationShortcutChoice = "dictationShortcutChoice"
-        static let recognitionModeShortcutChoice = "recognitionModeShortcutChoice"
-        static let dictationShortcutEnabled = "dictationShortcutEnabled"
-        static let recognitionModeShortcutEnabled = "recognitionModeShortcutEnabled"
+        static let dictationShortcuts = "dictationShortcuts"
+        static let recognitionModeShortcuts = "recognitionModeShortcuts"
+        static let showsVoiceOverlay = "showsVoiceOverlay"
+        static let overlaySuccessDuration = "overlaySuccessDuration"
+        static let overlayFailureDuration = "overlayFailureDuration"
     }
 
     private let userDefaults: UserDefaults
@@ -20,6 +21,21 @@ final class AppState: ObservableObject {
     @Published var statusText = "Idle"
     @Published var lastTranscriptPreview: String?
     @Published var lastDebugMessage: String?
+    @Published private(set) var voiceOverlayStatus: VoiceOverlayStatus = .hidden
+    @Published private(set) var voiceAudioLevels: [Double] = Array(repeating: 0, count: 5)
+    @Published private(set) var voiceOverlayTiming: VoiceOverlayTiming {
+        didSet {
+            userDefaults.set(voiceOverlayTiming.successDuration, forKey: DefaultsKey.overlaySuccessDuration)
+            userDefaults.set(voiceOverlayTiming.failureDuration, forKey: DefaultsKey.overlayFailureDuration)
+            onChange?()
+        }
+    }
+    @Published var showsVoiceOverlay: Bool {
+        didSet {
+            userDefaults.set(showsVoiceOverlay, forKey: DefaultsKey.showsVoiceOverlay)
+            onChange?()
+        }
+    }
     @Published private(set) var localModelReadiness: LocalModelReadiness = .waiting
     @Published var selectedRecognitionLanguage: DictationRecognitionLanguage {
         didSet {
@@ -45,15 +61,15 @@ final class AppState: ObservableObject {
             onChange?()
         }
     }
-    @Published var selectedDictationShortcut: DictationShortcutChoice {
+    @Published var dictationShortcuts: [ShortcutBinding] {
         didSet {
-            userDefaults.set(selectedDictationShortcut.rawValue, forKey: DefaultsKey.dictationShortcutChoice)
+            saveShortcuts(dictationShortcuts, key: DefaultsKey.dictationShortcuts)
             onChange?()
         }
     }
-    @Published var selectedRecognitionModeShortcut: RecognitionModeShortcutChoice {
+    @Published var recognitionModeShortcuts: [ShortcutBinding] {
         didSet {
-            userDefaults.set(selectedRecognitionModeShortcut.rawValue, forKey: DefaultsKey.recognitionModeShortcutChoice)
+            saveShortcuts(recognitionModeShortcuts, key: DefaultsKey.recognitionModeShortcuts)
             onChange?()
         }
     }
@@ -61,6 +77,13 @@ final class AppState: ObservableObject {
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        showsVoiceOverlay = userDefaults.object(forKey: DefaultsKey.showsVoiceOverlay) as? Bool ?? true
+        voiceOverlayTiming = VoiceOverlayTiming(
+            successDuration: userDefaults.object(forKey: DefaultsKey.overlaySuccessDuration) as? Double
+                ?? VoiceOverlayTiming.defaultDuration,
+            failureDuration: userDefaults.object(forKey: DefaultsKey.overlayFailureDuration) as? Double
+                ?? VoiceOverlayTiming.defaultDuration
+        )
         let savedValue = userDefaults.string(forKey: DefaultsKey.recognitionLanguage)
         selectedRecognitionLanguage = DictationRecognitionLanguage(rawValue: savedValue ?? "") ?? .mixed
         let savedChineseScriptPreference = userDefaults.string(forKey: DefaultsKey.chineseScriptPreference)
@@ -68,12 +91,23 @@ final class AppState: ObservableObject {
         selectedTranscriptionEngine = Self.loadTranscriptionEngine(from: userDefaults)
         let savedSuccessStatus = userDefaults.string(forKey: DefaultsKey.successStatusMode)
         selectedSuccessStatusMode = DictationSuccessStatusMode(rawValue: savedSuccessStatus ?? "") ?? .both
-        selectedDictationShortcut = Self.loadDictationShortcut(from: userDefaults)
-        selectedRecognitionModeShortcut = Self.loadRecognitionModeShortcut(from: userDefaults)
+        dictationShortcuts = Self.loadShortcuts(from: userDefaults, key: DefaultsKey.dictationShortcuts)
+            ?? [ShortcutBinding(modifier: .command, pressStyle: .double)]
+        // Recognition mode shortcuts are optional. The old fixed shortcut is intentionally not
+        // migrated because it is being removed from the client-facing configuration.
+        recognitionModeShortcuts = Self.loadShortcuts(from: userDefaults, key: DefaultsKey.recognitionModeShortcuts) ?? []
     }
 
     func update(for state: DictationState) {
         dictationState = state
+        if state != .recording { resetVoiceAudioLevels() }
+        voiceOverlayStatus = switch state {
+        case .idle: .hidden
+        case .recording: .recording
+        case .transcribing: .transcribing
+        case .inserting: selectedSuccessStatusMode == .transcriptCopied ? .copying : .inserting
+        case let .error(error): .failure(error)
+        }
         statusText = switch state {
         case .idle:
             "Idle"
@@ -92,6 +126,30 @@ final class AppState: ObservableObject {
     func setError(_ error: DictationError) {
         lastError = error
         update(for: .error(error))
+    }
+
+    func setVoiceOverlayStatus(_ status: VoiceOverlayStatus) {
+        voiceOverlayStatus = status
+    }
+
+    func setVoiceOverlayDuration(_ seconds: Double, forFailure: Bool) {
+        voiceOverlayTiming = VoiceOverlayTiming(
+            successDuration: forFailure ? voiceOverlayTiming.successDuration : seconds,
+            failureDuration: forFailure ? seconds : voiceOverlayTiming.failureDuration
+        )
+    }
+
+    // Meter updates intentionally bypass onChange: rebuilding the entire menu at 20 Hz
+    // would waste work and could disrupt an open menu.
+    func appendVoiceAudioLevel(_ level: Double) {
+        guard dictationState == .recording, showsVoiceOverlay else { return }
+        let normalized = level.isFinite ? min(1, max(0, level)) : 0
+        voiceAudioLevels = Array(voiceAudioLevels.dropFirst()) + [normalized]
+    }
+
+    func resetVoiceAudioLevels() {
+        guard voiceAudioLevels.contains(where: { $0 != 0 }) else { return }
+        voiceAudioLevels = Array(repeating: 0, count: 5)
     }
 
     func setTranscriptPreview(_ text: String) {
@@ -131,53 +189,83 @@ final class AppState: ObservableObject {
         selectedSuccessStatusMode = mode
     }
 
-    func setDictationShortcut(_ shortcut: DictationShortcutChoice) {
-        guard selectedDictationShortcut != shortcut else { return }
-        selectedDictationShortcut = shortcut
+    func addDictationShortcut(_ shortcut: ShortcutBinding) {
+        guard dictationShortcuts.contains(where: { $0.conflicts(with: shortcut) }) == false else { return }
+        dictationShortcuts.append(shortcut)
     }
 
-    func setRecognitionModeShortcut(_ shortcut: RecognitionModeShortcutChoice) {
-        guard selectedRecognitionModeShortcut != shortcut else { return }
-        selectedRecognitionModeShortcut = shortcut
+    func removeDictationShortcut(at index: Int) {
+        guard dictationShortcuts.indices.contains(index) else { return }
+        dictationShortcuts.remove(at: index)
+    }
+
+    func disableDictationShortcuts() {
+        dictationShortcuts = []
+    }
+
+    func addRecognitionModeShortcut(_ shortcut: ShortcutBinding) {
+        guard recognitionModeShortcuts.contains(where: { $0.conflicts(with: shortcut) }) == false else { return }
+        recognitionModeShortcuts.append(shortcut)
+    }
+
+    func removeRecognitionModeShortcut(at index: Int) {
+        guard recognitionModeShortcuts.indices.contains(index) else { return }
+        recognitionModeShortcuts.remove(at: index)
+    }
+
+    func disableRecognitionModeShortcuts() {
+        recognitionModeShortcuts = []
+    }
+
+    var dictationShortcutMenuTitle: String {
+        shortcutMenuTitle(for: dictationShortcuts)
+    }
+
+    var recognitionModeShortcutMenuTitle: String {
+        shortcutMenuTitle(for: recognitionModeShortcuts)
     }
 
     /// A saved preference for macOS Speech is ignored on a Mac that cannot run it, so moving a
-    /// settings file to an older system degrades to the bundled model instead of failing.
+    /// settings file to an older system degrades to Qwen3-ASR instead of failing. The old
+    /// `bundledWhisper` raw value is migrated so existing installs keep a working local engine.
     private static func loadTranscriptionEngine(from userDefaults: UserDefaults) -> TranscriptionEngineChoice {
-        guard let rawValue = userDefaults.string(forKey: DefaultsKey.transcriptionEngine),
-              let saved = TranscriptionEngineChoice(rawValue: rawValue) else {
+        guard let rawValue = userDefaults.string(forKey: DefaultsKey.transcriptionEngine) else {
             return .defaultChoice
         }
 
+        let saved: TranscriptionEngineChoice?
+        if rawValue == "bundledWhisper" {
+            saved = .qwen3ASR
+        } else {
+            saved = TranscriptionEngineChoice(rawValue: rawValue)
+        }
+
+        guard let saved else { return .defaultChoice }
+
         if saved == .appleSpeech, TranscriptionEngineChoice.isAppleSpeechAvailable == false {
-            return .bundledWhisper
+            return .qwen3ASR
         }
         return saved
     }
 
-    private static func loadDictationShortcut(from userDefaults: UserDefaults) -> DictationShortcutChoice {
-        if let rawValue = userDefaults.string(forKey: DefaultsKey.dictationShortcutChoice),
-           let savedChoice = DictationShortcutChoice(rawValue: rawValue) {
-            return savedChoice
-        }
-
-        if let legacyEnabled = userDefaults.object(forKey: DefaultsKey.dictationShortcutEnabled) as? Bool {
-            return legacyEnabled ? .doubleCommand : .disabled
-        }
-
-        return .doubleCommand
+    private static func loadShortcuts(from userDefaults: UserDefaults, key: String) -> [ShortcutBinding]? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode([ShortcutBinding].self, from: data)
     }
 
-    private static func loadRecognitionModeShortcut(from userDefaults: UserDefaults) -> RecognitionModeShortcutChoice {
-        if let rawValue = userDefaults.string(forKey: DefaultsKey.recognitionModeShortcutChoice),
-           let savedChoice = RecognitionModeShortcutChoice(rawValue: rawValue) {
-            return savedChoice
-        }
+    private func saveShortcuts(_ shortcuts: [ShortcutBinding], key: String) {
+        guard let data = try? JSONEncoder().encode(shortcuts) else { return }
+        userDefaults.set(data, forKey: key)
+    }
 
-        if let legacyEnabled = userDefaults.object(forKey: DefaultsKey.recognitionModeShortcutEnabled) as? Bool {
-            return legacyEnabled ? .commandShiftY : .disabled
+    private func shortcutMenuTitle(for shortcuts: [ShortcutBinding]) -> String {
+        switch shortcuts.count {
+        case 0:
+            "Off"
+        case 1:
+            shortcuts[0].menuTitle
+        default:
+            "\(shortcuts.count) Shortcuts"
         }
-
-        return .commandShiftY
     }
 }

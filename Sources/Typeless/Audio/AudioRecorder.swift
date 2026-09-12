@@ -4,9 +4,15 @@ import Foundation
 protocol AudioRecording: Sendable {
     func startRecording() async throws
     func stopRecording() async throws -> RecordedAudioClip
+    func recordingLevel(meteringEnabled: Bool) async -> Double
 }
 
-final class AudioRecorder: NSObject, AudioRecording, @unchecked Sendable {
+extension AudioRecording {
+    func recordingLevel(meteringEnabled: Bool) async -> Double { 0 }
+}
+
+// Recording and metering share one executor so stopping cannot race a meter read.
+actor AudioRecorder: AudioRecording {
     /// The process-wide temporary directory is shared with every other app, so recordings live in
     /// a folder of our own. That makes leftover-clip cleanup safe to do by wiping the directory.
     static let clipDirectory: URL = FileManager.default.temporaryDirectory
@@ -15,6 +21,24 @@ final class AudioRecorder: NSObject, AudioRecording, @unchecked Sendable {
     private var audioRecorder: AVAudioRecorder?
     private var currentClipURL: URL?
     private var isRecording = false
+
+    func recordingLevel(meteringEnabled: Bool) -> Double {
+        guard let audioRecorder, isRecording else { return 0 }
+        if audioRecorder.isMeteringEnabled != meteringEnabled {
+            audioRecorder.isMeteringEnabled = meteringEnabled
+        }
+        guard meteringEnabled else { return 0 }
+        // Apple requires refreshing the meters before reading dBFS.
+        // https://developer.apple.com/documentation/avfaudio/avaudiorecorder/updatemeters()
+        audioRecorder.updateMeters()
+        return Self.normalizedLevel(decibels: audioRecorder.averagePower(forChannel: 0))
+    }
+
+    static func normalizedLevel(decibels: Float) -> Double {
+        guard decibels.isFinite else { return 0 }
+        // Gate background hiss and expand normal speech into the small waveform's range.
+        return pow(min(1, max(0, (Double(decibels) + 55) / 55)), 1.5)
+    }
 
     /// Clears clips a previous run failed to delete, e.g. after a crash during transcription.
     static func removeOrphanedClips() {

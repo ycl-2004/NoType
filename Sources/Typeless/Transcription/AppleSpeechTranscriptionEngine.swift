@@ -9,8 +9,8 @@ import Speech
 /// why it forces the user to stay on one screen. This API takes audio in and hands a string back,
 /// so NoType keeps deciding where the transcript lands — the shortcut can be pressed from anywhere.
 ///
-/// Measured against the bundled Whisper model on the same clip: it does not translate, does not
-/// emit subtitle sign-offs, and finishes far faster (roughly 0.03x real time).
+/// Measured against a local offline model on the same clip: it does not translate, does not emit
+/// subtitle sign-offs, and finishes far faster (roughly 0.03x real time).
 @available(macOS 26.0, *)
 @MainActor
 final class AppleSpeechTranscriptionEngine: TranscriptionEngine, LocalModelReadinessReporting {
@@ -153,8 +153,8 @@ final class AppleSpeechTranscriptionEngine: TranscriptionEngine, LocalModelReadi
 
     // MARK: - Locale selection
 
-    /// Whisper detects the spoken language on its own; this engine cannot — a transcriber is built
-    /// for exactly one locale. `.mixed` therefore resolves to the user's own preferred language
+    /// Qwen3-ASR detects the spoken language on its own; this engine cannot — a transcriber is
+    /// built for exactly one locale. `.mixed` therefore resolves to the user's own preferred language
     /// rather than to a detector, and the chosen locale still transcribes foreign words it hears.
     nonisolated static func resolveLocale(
         for language: DictationRecognitionLanguage,

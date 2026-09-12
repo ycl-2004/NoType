@@ -1,7 +1,24 @@
 import ApplicationServices
+import AppKit
 
 @MainActor
 struct AccessibilityTextInserter: FocusedTextInserter {
+    // Terminal AX values describe screen output, not an editable document. Writing the whole
+    // value cannot reliably type into the shell; use the normal paste command instead.
+    private func isTerminal(_ element: AXUIElement) -> Bool {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success else { return false }
+        let identifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
+        return ["com.apple.Terminal", "com.mitchellh.ghostty", "com.googlecode.iterm2"].contains(identifier)
+    }
+
+    func canPaste(into target: FocusedInputTarget) -> Bool {
+        guard let element = target.element, let focused = currentFocusedElement(),
+              CFEqual(element, focused) else { return false }
+        if isTerminal(element) { return true }
+        guard let captured = target.capturedValue else { return true }
+        return copyStringAttribute(kAXValueAttribute, from: element) == captured
+    }
     func captureTarget() -> FocusedInputTarget? {
         guard let focusedElement = currentFocusedElement() else {
             return nil
@@ -53,6 +70,9 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         intoElement element: AXUIElement,
         capturedValue: String? = nil
     ) throws {
+        if isTerminal(element) {
+            throw InsertionError.unsupportedFocusedElement
+        }
         if try replaceSelectedText(in: element, with: text, capturedValue: capturedValue) {
             return
         }

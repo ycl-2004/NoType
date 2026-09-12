@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-007: User-recorded shortcuts](007-user-recorded-shortcuts.md)
 
 ## Date
 

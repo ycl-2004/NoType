@@ -20,21 +20,22 @@ struct ShortcutMenuTests {
     }
 
     @Test
-    func shortcutMenuOffersIndependentDisabledChoices() {
+    func shortcutMenuOffersIndependentShortcutConfiguration() {
         let appState = makeShortcutMenuAppState()
         let controller = MenuBarController(appState: appState, coordinator: DictationCoordinator(appState: appState))
         let shortcutItems = controller.shortcutsMenu().items
 
-        #expect(shortcutItems[0].submenu?.items.contains { $0.title == "Disabled" } == true)
-        #expect(shortcutItems[1].submenu?.items.contains { $0.title == "Disabled" } == true)
+        #expect(shortcutItems[0].submenu?.items.contains { $0.title == "Add Shortcut…" } == true)
+        #expect(shortcutItems[1].submenu?.items.contains { $0.title == "Add Shortcut…" } == true)
+        #expect(shortcutItems[1].submenu?.items.contains { $0.title == "No shortcuts set" } == true)
     }
 
     @Test
-    func selectingDisabledDictationShortcutUpdatesAppState() {
+    func disablingDictationShortcutsUpdatesAppState() {
         let appState = makeShortcutMenuAppState()
-        appState.setDictationShortcut(.disabled)
+        appState.disableDictationShortcuts()
 
-        #expect(appState.selectedDictationShortcut == .disabled)
+        #expect(appState.dictationShortcuts.isEmpty)
     }
 
     @Test
@@ -49,7 +50,7 @@ struct ShortcutMenuTests {
         #expect(mainTitles.contains("Debug:") == false)
         #expect(mainTitles.contains { $0.hasPrefix("Log:") } == false)
         #expect(mainTitles.contains("Diagnostics"))
-        #expect(controller.diagnosticsMenu().items.contains { $0.title == "Last Event: Recorder started" })
+        #expect(controller.diagnosticsMenu().items.contains { $0.title == "Recent Activity: Recorder started" })
     }
 
     @Test
@@ -59,19 +60,19 @@ struct ShortcutMenuTests {
 
         appState.setLocalModelReadiness(.preparing)
         var titles = controller.diagnosticsMenu().items.map(\.title)
-        #expect(titles.contains("Local Model: Preparing…"))
-        #expect(titles.contains { $0.contains("Preparing the speech model") })
+        #expect(titles.contains("Speech Model: Preparing…"))
+        #expect(titles.contains { $0.contains("Preparing for dictation") })
 
         appState.setLocalModelReadiness(.ready)
         titles = controller.diagnosticsMenu().items.map(\.title)
-        #expect(titles.contains("Local Model: Ready"))
-        #expect(titles.contains { $0.contains("loaded and ready") })
+        #expect(titles.contains("Speech Model: Ready"))
+        #expect(titles.contains { $0.contains("Ready for dictation") })
 
         appState.setLocalModelReadiness(.failed("Required model is missing"))
         titles = controller.diagnosticsMenu().items.map(\.title)
-        #expect(titles.contains("Local Model: Failed"))
-        #expect(titles.contains("Reason: Required model is missing"))
-        #expect(titles.contains("Retry Model Preparation"))
+        #expect(titles.contains("Speech Model: Failed"))
+        #expect(titles.contains("Details: Required model is missing"))
+        #expect(titles.contains("Try Again"))
     }
 }
 

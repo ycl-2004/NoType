@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted, and the decision still stands: readiness is reported as Preparing / Ready / Failed rather
+than a percentage. The engine described below is not. WhisperKit and Core ML were replaced by
+sherpa-onnx and the ONNX Runtime in [ADR-008](008-qwen3-asr-replaces-whisper.md), so there is no
+Core ML specialization step any more — the slow first-run case is now the model download. Read the
+context below as the reasoning, not as the current mechanism.
 
 ## Date
 

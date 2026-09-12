@@ -67,9 +67,10 @@ enum TranscriptPostProcessor {
         text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 
-    /// Whisper was trained on a lot of subtitled video, so when an utterance ends in silence it
-    /// tends to append the sign-off such videos end with — words the speaker never said. These are
-    /// only stripped from the very end, so quoting one mid-sentence keeps it intact.
+    /// Models trained on subtitled video tend to append the sign-off such videos end with when an
+    /// utterance trails off into silence — words the speaker never said. Observed on the previous
+    /// Whisper engine and kept for every local model. These are only stripped from the very end, so
+    /// quoting one mid-sentence keeps it intact.
     private static func removeTrailingHallucinatedClosers(from text: String) -> String {
         let patterns = [
             #"(?i)([\s,，。.!?！？；;:：、]+)(thank you|thanks)([\s.!?。！？]*)$"#,

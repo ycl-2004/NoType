@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted — implemented in NoType 0.2.0
+Superseded by [ADR-008](008-qwen3-asr-replaces-whisper.md) — implemented in NoType 0.2.0, then
+undone when Whisper was replaced by Qwen3-ASR. No model is bundled in the app any more; both local
+models download on first use. Kept for the reasoning behind the original bundling decision.
 
 ## Date
 

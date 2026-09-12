@@ -10,7 +10,7 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
         case .mixed:
             "Auto (中英混说)"
         case .english:
-            "英文优先"
+            "English"
         case .chinese:
             "中文优先"
         }
@@ -24,17 +24,6 @@ enum DictationRecognitionLanguage: String, CaseIterable, Equatable {
             "English-first"
         case .chinese:
             "Chinese-first"
-        }
-    }
-
-    var whisperLanguageCode: String? {
-        switch self {
-        case .mixed:
-            nil
-        case .english:
-            "en"
-        case .chinese:
-            "zh"
         }
     }
 
