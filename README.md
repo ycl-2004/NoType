@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.3.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
+  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.4.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
   ·
   <a href="https://github.com/ycl-2004/NoType/releases">Releases</a>
   ·
@@ -51,7 +51,7 @@ transcription API.
 
 ## Quick start
 
-1. **[Download `NoType-0.3.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.3.0-arm64.zip)** and unzip it. No speech model is bundled — the app downloads one on first use.
+1. **[Download `NoType-0.4.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.4.0-arm64.zip)** and unzip it. No speech model is bundled — the app downloads one on first use.
 2. Move `NoType.app` to `/Applications`. On first launch, Control-click the app and choose **Open** — the current build is ad-hoc signed and not yet Apple-notarized.
 3. Allow **Microphone** access for recording and **Accessibility** access for global shortcuts and direct text insertion. On macOS 26 or later, also allow **Speech Recognition** so NoType can use the system's on-device recognizer.
 
@@ -174,19 +174,18 @@ The defaults are:
 
 ## Current release
 
-NoType `0.3.0` is available as an Apple Silicon archive from the
-[`v0.3.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.3.0)
+NoType `0.4.0` is available as an Apple Silicon archive from the
+[`v0.4.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.4.0)
 release.
 
 | Artifact | Purpose |
 | --- | --- |
-| `NoType-0.3.0-arm64.zip` | Ready-to-run app; the speech model is downloaded on first use |
-| `NoType-0.3.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
+| `NoType-0.4.0-arm64.zip` | Ready-to-run app; the speech model is downloaded on first use |
+| `NoType-0.4.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
 
-Speech models are not committed to this repository and are no longer bundled in
-the archive. NoType fetches one from the official sherpa-onnx release on first
-use. `0.3.0` predates that change and still ships with the model included; see
-the [changelog](CHANGELOG.md) for what changed since.
+Speech models are not committed to this repository and are not bundled in the
+archive. NoType fetches one from the official sherpa-onnx release on first use.
+See the [changelog](CHANGELOG.md) for the current engine and model changes.
 
 ## FAQ
 
@@ -363,8 +362,8 @@ creates:
 
 ```text
 dist/NoType.app
-dist/NoType-0.3.0-arm64.zip
-dist/NoType-0.3.0-arm64.zip.sha256
+dist/NoType-0.4.0-arm64.zip
+dist/NoType-0.4.0-arm64.zip.sha256
 ```
 
 The default signature is ad-hoc. To use an installed Developer ID identity:

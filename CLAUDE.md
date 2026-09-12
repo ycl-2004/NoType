@@ -49,7 +49,7 @@ Sources/Typeless/
 
 ## 当前状态
 
-已发布 0.3.0。`[Unreleased]` 中：三引擎路由、本地模型就绪状态、用户自定义快捷键，以及
+已发布 0.4.0。当前发布包含三引擎路由、本地模型就绪状态、用户自定义快捷键，以及
 **用 Qwen3-ASR 0.6B INT8 替换 Whisper**（ADR-008）——WhisperKit 依赖和 `Vendor/` 目录
 已删除，release 不再打包模型。
 

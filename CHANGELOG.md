@@ -2,7 +2,9 @@
 
 All notable user-facing changes to NoType are recorded here.
 
-## [Unreleased]
+## [0.4.0] - 2026-09-11
+
+Release: [v0.4.0](https://github.com/ycl-2004/NoType/releases/tag/v0.4.0)
 
 ### Added
 
@@ -40,6 +42,13 @@ All notable user-facing changes to NoType are recorded here.
 - The debug log now records the detected language, decode time, audio duration, and real-time factor for each dictation, so a slow one can be attributed without attaching a profiler.
 
 - Single-language dictation through the macOS Speech engine returned a final transcript 0.083s after speech ended on a 10.6s Chinese clip, against roughly 1s for the local model it was measured against.
+
+### Verification
+
+- 146 tests passed across 23 suites.
+- Release app version `0.4.0` (`CFBundleVersion` 4) passed whole-bundle signature verification.
+- Release ZIP passed archive integrity verification.
+- Release ZIP SHA-256: `b28cce7882df56e4341eebe73a8ef6581590bd21dfdf973c9b2ee97d6590f86f`.
 
 ## [0.3.0] - 2026-08-14
 

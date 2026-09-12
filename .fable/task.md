@@ -15,6 +15,7 @@ Deliver the approved A layout in the native app, driven by real microphone level
 9. Added: install the verified update into `/Applications/NoType.app` and restart it.
 10. Added: use English-first menu copy (`English`, `Show Voice Overlay`, and `Overlay Timing`), remove the redundant active-recording helper line, and accept custom 0–5 second result durations.
 11. Added: commit the completed changes and push them to the current GitHub branch.
+12. Added: switch to the merged `main`, version the next release as `0.4.0` / build `4`, and produce the tagged release app and archive.
 
 ## Decisions
 - Use AppKit nonactivating click-through NSPanel and a compact SwiftUI view.
