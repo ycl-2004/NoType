@@ -71,6 +71,17 @@ Deliver the approved A layout in the native app, driven by real microphone level
 - Requirement 11 complete: commit `3bf24d8` (`feat: add configurable voice overlay`) was pushed
   successfully to `origin/feat/new_models`.
 
+## Release follow-up — 2026-09-11
+- Requirement 12 complete: switched to `main`, fast-forwarded to merged commit `2b38000`, and
+  prepared NoType `0.4.0` / build `4` from the merged code.
+- `swift test`: 146 tests in 23 suites passed in 6.068 seconds.
+- `./scripts/build_release.sh` produced `dist/NoType.app`,
+  `dist/NoType-0.4.0-arm64.zip`, and its checksum. The app version, whole-bundle signature, ZIP
+  integrity, and checksum were verified. SHA-256:
+  `b28cce7882df56e4341eebe73a8ef6581590bd21dfdf973c9b2ee97d6590f86f`.
+- Release preparation commit `c810a2b` was pushed to `origin/main`; annotated tag `v0.4.0` was
+  created at that commit and pushed to GitHub.
+
 ## Verification limits
 - Microphone input is wired to the real AVAudioRecorder API; pipeline tests use a metered stub.
   Live speech/shortcut/insertion in external apps was not exercised with the new bundle.
