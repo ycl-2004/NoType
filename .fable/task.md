@@ -1,89 +1,31 @@
-# Current Task: Optional bottom-center voice overlay
+# Current Task: Self-healing global shortcuts
 
 ## Goal
-Deliver the approved A layout in the native app, driven by real microphone levels and dictation outcomes.
+Keep NoType's global shortcuts responsive in the background and recover automatically when macOS drops a modifier release event.
 
 ## Requirements (append only)
-1. Dark capsule, thin blue outline, bottom-center placement matching the approved preview.
-2. Immediately show recording for the whole recording; waveform responds to microphone volume.
-3. Show transcription, insertion, copied/inserted outcomes and failures; every status is under five characters.
-4. Persist an on/off setting for the overlay.
-5. Preserve input focus and existing insertion/clipboard behavior.
-6. Verify native appearance, lifecycle, relevant tests, and a distributable local app build.
-7. Added: separately configurable completion and failure duration, default 1.5 seconds, 0–5 seconds; zero hides that category.
-8. Clarified: adjust only result duration; recording appears immediately, no appearance delay.
-9. Added: install the verified update into `/Applications/NoType.app` and restart it.
-10. Added: use English-first menu copy (`English`, `Show Voice Overlay`, and `Overlay Timing`), remove the redundant active-recording helper line, and accept custom 0–5 second result durations.
-11. Added: commit the completed changes and push them to the current GitHub branch.
-12. Added: switch to the merged `main`, version the next release as `0.4.0` / build `4`, and produce the tagged release app and archive.
+1. Remove the permanent `activeModifiers` ghost-key lockout without requiring an app restart.
+2. Reconcile tracked modifier state with AppKit's current hardware modifier state during shortcut handling.
+3. Add a low-cost watchdog that can clear stale modifier state while preserving valid long-held modifier combinations.
+4. Measure modifier-only double taps from the first release to the second press, with a slightly more forgiving duration window.
+5. Keep shortcut monitoring active after launch and reduce background throttling with a retained, correctly ended activity assertion.
+6. Add regression coverage for dropped releases and the revised double-tap timing.
+7. Update the shortcut decision record and changelog with the implemented behavior and sources.
+8. Run targeted and unfiltered tests, inspect the final diff, and report any unrelated failures honestly.
 
 ## Decisions
-- Use AppKit nonactivating click-through NSPanel and a compact SwiftUI view.
-- Sample AVAudioRecorder meters on its actor; publish levels without rebuilding menus.
-- Separate transient feedback from the dictation state; settings update the existing countdown and never resurrect expired feedback.
-- User screenshot and approved A preview define the design; do not introduce a new visual direction.
-- Prior assistant incorrectly invoked a Superpowers preview despite the user's default ban; continue direct execution and do not extend that workflow.
-- Initial scope was implementation and local build; the user subsequently authorized installation
-  in `/Applications/NoType.app`, then explicitly authorized commit and push.
+- Keep AppKit local/global event monitors because the app supports Fn and left/right modifier identity; do not expand this fix into a Carbon hotkey rewrite.
+- Use `NSEvent.modifierFlags` for recovery because Apple documents it as current modifier state independent of delivered events.
+- Reconcile by modifier family. AppKit exposes the family flag, so a missing family flag can clear a stale left/right entry, while a present family flag preserves valid long-held combinations.
+- Poll every 250ms on the main actor. The watchdog is a recovery path, not an aggressive timeout on real modifier presses.
+- Retain `ProcessInfo.beginActivity`'s token and end it during application termination.
+- Leave the Ghostty paste fallback unchanged in this minimal fix; its synthetic Command+V is input that should cancel a pending shortcut pair, while the permanent lockout is owned by `ShortcutMonitor` state.
 
 ## Evidence
-- Apple documentation verified for AVAudioRecorder metering, nonactivating panels, click-through windows, full-screen collection behavior.
-- Previous task record preserved verbatim in history.md.
-- Final unfiltered `swift test`: 146 tests in 23 suites passed
-  in 5.708 seconds on 2026-09-11. Includes delivery outcome feedback, metering visibility,
-  persisted defaults/zero/cap, menu actions, focus preservation, immediate display, expiry while
-  disabled, live timing changes, and cancellation both before and during a previous result's fade.
-- Actual NSHostingView captures opened and visually inspected in `outputs/voice-overlay-qa/`:
-  recording, transcribing, inserted, copied, insertionFailed. Improved processing icon contrast
-  after the first capture; final capture and test run include the updated view.
-- `./scripts/build_app.sh`: release build succeeded (8.91s), asset catalog compiled,
-  and `codesign --verify --deep --strict` passed for `dist/NoType.app`.
-- Build approval was initially blocked by quota on automatic approval review; after the user's
-  continue instruction, the same reviewed local build succeeded. No bypass was used.
+- Apple documentation verified for AppKit global/local monitors, current modifier flags, and `ProcessInfo` activity tokens.
+- `swift test --filter ShortcutMonitorTests`: 2 tests passed, including same-family recovery after a dropped Left Command release and release-to-press double-tap timing.
+- Initial unfiltered `swift test` compiled the change and passed the new code's build, but failed in the existing `VoiceOverlayWindowTests.editingDurationExpiresExistingResultAndDoesNotReviveIt` timing case; this is being rerun separately before delivery.
 
-## Completed — 2026-09-11
-- Requirements 1–8 implemented and verified to the scope above.
-- README, CHANGELOG, known issue #7, and ADR-009 updated.
-- Initial delivery supplied `dist/NoType.app` without replacing the installed version.
-
-## Installation follow-up — 2026-09-11
-- Requirement 9 complete: backed up the old installed app at
-  `/private/tmp/notype-before-overlay.TxepGC/NoType.app`; compared it byte-for-byte before replacement.
-- Confirmed the previous process had no recording file open; quit it gracefully before replacing.
-- Signed the new bundle with the user's Apple Development identity (team BQYHJCCRMP),
-  installed it into `/Applications/NoType.app`, and verified exact bundle equality with `dist`.
-- Strict signature verification passed. New installed process PID 29613 is running from
-  `/Applications/NoType.app/Contents/MacOS/noType`.
-- Fresh launch of the updated bundle succeeded with process PID 33111 from
-  `/Applications/NoType.app/Contents/MacOS/noType`. Strict signature verification and exact
-  bundle comparison against `dist/NoType.app` passed. This verifies launch; it does not assert
-  live microphone permissions.
-- Previous version was ad-hoc signed, so the change to developer signing can require renewed
-  macOS permissions. This was disclosed before installation; no permission databases were changed.
-
-## English copy and commit follow-up — 2026-09-11
-- Requirement 10 complete: recognition language now displays `English` while Chinese remains
-  `中文优先`; overlay controls are `Show Voice Overlay` and `Overlay Timing`; the redundant
-  active-recording helper line was removed; completion and failure durations accept custom values
-  from 0 to 5 seconds, with 0 hiding that result category.
-- Added validation for decimal and comma-decimal input, bounds, invalid input, menu labels, and
-  recognition language copy. The full suite passed after this change.
-- Requirement 11 complete: commit `3bf24d8` (`feat: add configurable voice overlay`) was pushed
-  successfully to `origin/feat/new_models`.
-
-## Release follow-up — 2026-09-11
-- Requirement 12 complete: switched to `main`, fast-forwarded to merged commit `2b38000`, and
-  prepared NoType `0.4.0` / build `4` from the merged code.
-- `swift test`: 146 tests in 23 suites passed in 6.068 seconds.
-- `./scripts/build_release.sh` produced `dist/NoType.app`,
-  `dist/NoType-0.4.0-arm64.zip`, and its checksum. The app version, whole-bundle signature, ZIP
-  integrity, and checksum were verified. SHA-256:
-  `b28cce7882df56e4341eebe73a8ef6581590bd21dfdf973c9b2ee97d6590f86f`.
-- Release preparation commit `c810a2b` was pushed to `origin/main`; annotated tag `v0.4.0` was
-  created at that commit and pushed to GitHub.
-
-## Verification limits
-- Microphone input is wired to the real AVAudioRecorder API; pipeline tests use a metered stub.
-  Live speech/shortcut/insertion in external apps was not exercised with the new bundle.
-- Multiple-monitor placement was verified with coordinates; full-screen and physical
-  multiple-monitor behavior were configured but not manually exercised.
+## Outstanding
+- Complete the unfiltered test rerun and inspect the final worktree/diff.
+- Build the app if the repository's normal app build is available and report its result.

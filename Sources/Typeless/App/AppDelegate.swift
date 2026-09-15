@@ -10,11 +10,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recognitionModeShortcutMonitor: ShortcutMonitor?
     private var registeredDictationShortcuts: [ShortcutBinding]?
     private var registeredRecognitionModeShortcuts: [ShortcutBinding]?
+    private var shortcutListeningActivity: NSObjectProtocol?
     private let microphonePermissionManager = MicrophonePermissionManager()
     private let accessibilityPermissionManager = AccessibilityPermissionManager()
     private let permissionSettingsOpener = SystemSettingsOpener()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        shortcutListeningActivity = ProcessInfo.processInfo.beginActivity(
+            options: .userInitiatedAllowingIdleSystemSleep,
+            reason: "Listening for global keyboard shortcuts"
+        )
+
         appState = AppState()
         coordinator = DictationCoordinator(
             appState: appState,
@@ -47,6 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voiceOverlayController?.close()
         dictationShortcutMonitor?.stop()
         recognitionModeShortcutMonitor?.stop()
+        if let shortcutListeningActivity {
+            ProcessInfo.processInfo.endActivity(shortcutListeningActivity)
+            self.shortcutListeningActivity = nil
+        }
     }
 
     private func refreshShortcutRegistration() {

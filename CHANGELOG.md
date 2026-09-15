@@ -2,6 +2,16 @@
 
 All notable user-facing changes to NoType are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed a shortcut lockout after macOS drops a modifier-key release event. Shortcut state now
+  reconciles with AppKit's current modifier flags, and modifier double taps use the interval from
+  the first release to the second press. Global shortcut listening also keeps a retained activity
+  assertion so the accessory app and its recovery watchdog are less likely to be throttled in the
+  background.
+
 ## [0.4.0] - 2026-09-11
 
 Release: [v0.4.0](https://github.com/ycl-2004/NoType/releases/tag/v0.4.0)
