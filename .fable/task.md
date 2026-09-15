@@ -24,8 +24,17 @@ Keep NoType's global shortcuts responsive in the background and recover automati
 ## Evidence
 - Apple documentation verified for AppKit global/local monitors, current modifier flags, and `ProcessInfo` activity tokens.
 - `swift test --filter ShortcutMonitorTests`: 2 tests passed, including same-family recovery after a dropped Left Command release and release-to-press double-tap timing.
-- Initial unfiltered `swift test` compiled the change and passed the new code's build, but failed in the existing `VoiceOverlayWindowTests.editingDurationExpiresExistingResultAndDoesNotReviveIt` timing case; this is being rerun separately before delivery.
+- Unfiltered `swift test` compiled the change; the 2 new shortcut tests and the other 146 existing tests passed. The existing `VoiceOverlayWindowTests.editingDurationExpiresExistingResultAndDoesNotReviveIt` timing case failed in the full concurrent run, while its isolated rerun passed.
+- `./scripts/build_app.sh` produced `dist/NoType.app`; the release build and whole-bundle `codesign --verify --deep --strict` check passed.
+- `/Applications/NoType.app` now reports version `0.4.0`, build `4`, has a valid whole-bundle signature, and matches `dist/NoType.app` byte-for-byte. The prior installed bundle is recoverable at `/private/tmp/notype-before-shortcut-20260915/NoType.app`.
+- Commit `2de56e9` (`fix: make global shortcuts self-healing`) was pushed to `origin/main`.
 
-## Outstanding
-- Complete the unfiltered test rerun and inspect the final worktree/diff.
-- Build the app if the repository's normal app build is available and report its result.
+## Completed — 2026-09-15
+- Implemented modifier family reconciliation, a 250ms current-state watchdog, release-to-press modifier double-tap timing, and a retained startup activity assertion.
+- Added regression tests for dropped same-family releases and a held second tap.
+- Updated the ADR and changelog.
+- Verified the final diff before committing. Existing untracked `.superpowers/` and `outputs/` files were left untouched.
+
+## Verification limits
+- The full test suite still reports the pre-existing overlay window timing failure only under concurrent execution; the isolated test passes.
+- Live shortcut behavior through Accessibility/global monitoring, Secure Input, and external apps was not manually exercised with the newly installed bundle.
