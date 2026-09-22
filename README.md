@@ -34,7 +34,7 @@ NoType is a native macOS menu-bar dictation app. Focus a text field, start
 dictation, speak, and stop — NoType transcribes your voice locally and inserts
 the result back into the app you were using.
 
-Three on-device engines are available, and NoType picks between them per dictation:
+Four on-device engines are available, and NoType picks between them per dictation:
 
 - **macOS Speech** (macOS 26 or later) uses the on-device recognizer built into
   the system. It is roughly an order of magnitude faster than a local model,
@@ -47,6 +47,11 @@ Three on-device engines are available, and NoType picks between them per dictati
 - **SenseVoice Small** is an optional local ONNX model for Chinese, Cantonese,
   English, Japanese, and Korean. It is downloaded once into the shared
   `~/Documents/huggingface/models/k2-fsa` folder when you select it.
+- **R2T2 Streaming (Experimental)** uses the Confucius4-R2T2 Q4_K_M GGUF model
+  and Q8_0 audio projector through llama.cpp and Metal. It transcribes in the
+  background while you speak, but keeps the text in NoType's buffer until you
+  stop; it never types partial text into the focused field. Its files live in
+  `~/Documents/huggingface/models/mradermacher/Confucius4-R2T2-GGUF`.
 
 None of the engines sends audio anywhere. There is no account and no remote
 transcription API.
@@ -64,11 +69,12 @@ Preparation depends on which engine the current settings use. macOS Speech
 downloads a system language model the first time a language is used, which takes
 seconds. Qwen3-ASR downloads its roughly 1 GB ONNX archive on first use, and
 SenseVoice its roughly 230 MB one, if they are not already in the shared Hugging
-Face folder. Open **NoType → Diagnostics** to see **Speech Model: Preparing**,
+Face folder. R2T2 downloads its roughly 1.6 GB GGUF model-plus-projector package
+when selected. Open **NoType → Diagnostics** to see **Speech Model: Preparing**,
 **Ready**, or **Failed** without reading the debug log. A downloaded model is
 shared across NoType builds and stays put when you replace the app. Use **Engine
-→ Manage Downloaded Models** to remove NoType's downloaded Qwen3-ASR or
-SenseVoice copies when you no longer need them.
+→ Manage Downloaded Models** to remove NoType's downloaded Qwen3-ASR,
+SenseVoice, or R2T2 copies when you no longer need them.
 
 If Control-click → **Open** is unavailable, clear the quarantine flag:
 
@@ -81,17 +87,17 @@ open /Applications/NoType.app
 
 - Apple Silicon Mac (`arm64`)
 - macOS 15.0 or later; **macOS 26 or later** to use the macOS Speech engine
-- About 3 GB of free space for the app and one downloaded local model
+- About 4 GB of free space for the app and one downloaded local model
 - Microphone permission for recording
 - Accessibility permission for global keyboard shortcuts and direct insertion
 - Speech Recognition permission for the macOS Speech engine (macOS 26 or later)
 
 ## Why NoType
 
-- **Your voice stays on your Mac.** All three engines run on-device; temporary recordings are deleted after each attempt.
+- **Your voice stays on your Mac.** All four engines run on-device; temporary recordings are deleted after each attempt.
 - **Chinese and English can share a sentence.** Auto mixed recognition is designed for code-switching, with Chinese-first and English-first modes when you want a stronger bias.
 - **Speed where it is available.** On macOS 26, single-language dictation goes through the system recognizer and finishes in a fraction of the time a local model needs.
-- **Choose the trade-off.** Qwen3-ASR and SenseVoice are both downloaded on demand and reused from the shared Hugging Face folder, so the app itself stays small.
+- **Choose the trade-off.** Qwen3-ASR, SenseVoice, and experimental R2T2 are downloaded on demand and reused from the shared Hugging Face folder, so the app itself stays small.
 - **It returns to the right place.** NoType remembers the focused input where dictation began. If that target changes, it keeps the transcript on the clipboard instead of inserting into the wrong field.
 - **It stays out of the way.** No windows are required for normal use; status, modes, permissions, shortcuts, and diagnostics live in the menu bar.
 
@@ -107,12 +113,13 @@ open /Applications/NoType.app
 
 **Engine**
 
-- Choose **macOS Speech (fast)**, **Qwen3-ASR 0.6B INT8**, or **SenseVoice Small** from the menu bar; the choice persists across launches.
+- Choose **macOS Speech (fast)**, **Qwen3-ASR 0.6B INT8**, **SenseVoice Small**, or **R2T2 Streaming (Experimental)** from the menu bar; the choice persists across launches.
+- R2T2 uses 320 ms internal streaming chunks and an append-only stable transcript buffer. The live preview is overlay-only; stopping still uses the same captured-target protection and output modes as every other engine.
 - **Auto (中英混說)** uses the selected local model. If macOS Speech is selected, the menu shows the mixed-language override as `macOS Speech → Qwen3-ASR 0.6B INT8`.
 - 中文優先 and English honour the selected engine.
 - On macOS 15 the choice is unavailable and everything uses Qwen3-ASR.
 - A local model is loaded only when a dictation actually needs it, so staying on macOS Speech avoids both local model startup costs.
-- **Manage Downloaded Models** appears under the engine menu. It removes only NoType's exact Qwen3-ASR and SenseVoice download folders after confirmation; macOS Speech assets are left to macOS.
+- **Manage Downloaded Models** appears under the engine menu. It removes only NoType's exact Qwen3-ASR, SenseVoice, and R2T2 download folders after confirmation; macOS Speech assets are left to macOS.
 
 **Recognition**
 
@@ -133,6 +140,7 @@ open /Applications/NoType.app
 - Live idle, recording, transcribing, inserting, and error states.
 - **Show Voice Overlay** toggles a compact, dark capsule at the bottom center of the screen where dictation starts. It appears immediately while recording, responds to microphone volume, and stays visible through transcription without taking keyboard focus.
 - **Overlay Timing** lets you enter separate completion and failure feedback durations from 0 to 5 seconds, defaulting to 1.5 seconds for both. Zero hides that category; recording and transcription remain visible while active. Settings persist and changes apply to the current countdown. Short labels include `輸入中…`, `轉寫中…`, `已插入`, `已複製`, and `插入失敗`; detailed errors remain in the menu.
+- **Show Live Transcript** optionally displays R2T2's stable in-progress text in the recording overlay. It is display-only and does not change the captured target or insertion timing.
 - Recognition and Chinese-script markers visible in the menu-bar icon.
 - Configurable dictation and recognition-mode shortcuts that persist across launches.
 - Permission status, the latest diagnostic event, and direct access to the local debug log. Logs retain the newest five days and are trimmed whenever NoType logs activity or accesses the log.
@@ -165,9 +173,9 @@ The defaults are:
 
 ## Privacy
 
-- Speech recognition runs locally, either through sherpa-onnx and the ONNX Runtime or the on-device recognizer built into macOS.
+- Speech recognition runs locally, either through sherpa-onnx and the ONNX Runtime, llama.cpp with Metal, or the on-device recognizer built into macOS.
 - NoType does not use a remote transcription API.
-- Qwen3-ASR and SenseVoice each download their own model, once, only when selected, and only from the official sherpa-onnx release archive. The macOS Speech engine may ask macOS to install a system language model the first time a language is used; that model is managed by macOS, shared with every app, and stored outside the app bundle. No audio is ever uploaded.
+- Qwen3-ASR, SenseVoice, and R2T2 each download their own model files, once, only when selected, and only into NoType's shared `~/Documents/huggingface` model folder. R2T2 uses the [Confucius4-R2T2 GGUF files](https://huggingface.co/mradermacher/Confucius4-R2T2-GGUF); the macOS Speech engine may ask macOS to install a system language model the first time a language is used. No audio is ever uploaded.
 - Temporary audio is removed after transcription succeeds or fails.
 - There are no accounts, analytics, or telemetry in the app.
 - Microphone access is used only for active dictation.
@@ -227,21 +235,24 @@ before its first local dictation; every dictation after that is fully offline.
 <details>
 <summary>Where do local models get stored, and can I remove them?</summary>
 
-Both local models live under one shared folder, at one fixed path each:
+All downloadable NoType models live under one shared Hugging Face folder:
 
 ```text
 ~/Documents/huggingface/models/k2-fsa/
   sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/
   sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17/
+~/Documents/huggingface/models/mradermacher/
+  Confucius4-R2T2-GGUF/
 ```
 
 NoType never creates a second copy in Application Support or inside the app
 bundle, so replacing the app leaves your downloads alone and a development
 machine keeps one copy rather than one per build.
 
-**Engine → Manage Downloaded Models** removes exactly those two folders after
+**Engine → Manage Downloaded Models** removes exactly those NoType folders after
 confirmation. It does not remove macOS Speech assets, the signed app bundle, or
-unrelated Hugging Face models sitting in the same directory.
+unrelated Hugging Face models sitting in the same directory. Downloaders reject
+paths outside `~/Documents/huggingface`, including symlinks that resolve outside it.
 
 </details>
 
@@ -384,7 +395,7 @@ before treating a build as a public, notarized release.
 ## Project layout
 
 - `Sources/Typeless/Audio/` — microphone capture and temporary recorded clips.
-- `Sources/Typeless/Transcription/` — the three engines, the router that chooses between them, model installers, and transcript cleanup.
+- `Sources/Typeless/Transcription/` — the four engines, the router that chooses between them, model installers, and transcript cleanup.
 - `Sources/Typeless/Accessibility/` — focused-target capture, direct insertion, clipboard handling, and paste fallback.
 - `Sources/Typeless/Coordinator/` — dictation state transitions and orchestration.
 - `Sources/Typeless/App/` — menu-bar UI, permissions, diagnostics, and app lifecycle.
@@ -400,7 +411,7 @@ before treating a build as a public, notarized release.
 - macOS 15.0 or later is required.
 - The current public build is ad-hoc signed and not notarized.
 - There is no in-app updater; new versions are installed manually.
-- Both local models are downloaded on first use rather than bundled, so a new install needs a network connection before its first local dictation.
+- All downloadable local models are downloaded on first use rather than bundled, so a new install needs a network connection before its first local dictation.
 - Qwen3-ASR replaced Whisper recently. Its transcription quality and latency on this app's recordings have not yet been measured on-device against the engine it replaced.
 - SenseVoice supports Chinese, Cantonese, English, Japanese, and Korean. The upstream direct inference path documents a 30-second input limit; NoType's longer-recording path still needs real-device validation.
 - The macOS Speech engine requires macOS 26 or later and cannot detect the spoken language, so Auto uses Qwen3-ASR when macOS Speech is selected.
@@ -418,11 +429,15 @@ before treating a build as a public, notarized release.
 - [ADR-006: SenseVoice engine and model storage](docs/decisions/006-sensevoice-engine-and-model-storage.md) — why SenseVoice is additive, where its one shared model lives, and why model deletion cannot touch macOS Speech.
 - [ADR-007: User-recorded shortcuts](docs/decisions/007-user-recorded-shortcuts.md) — how arbitrary shortcuts, left/right modifiers, multiple bindings, and defaults work.
 - [ADR-008: Qwen3-ASR replaces Whisper](docs/decisions/008-qwen3-asr-replaces-whisper.md) — why the local engine changed, why no model is bundled any more, and what is still unmeasured.
+- [ADR-009: Optional voice overlay](docs/decisions/009-voice-overlay.md) — the target-safe overlay, waveform, and result timing behavior.
+- [ADR-010: Experimental R2T2 streaming engine](docs/decisions/010-r2t2-streaming-engine.md) — internal streaming, the 320 ms first cadence, and strict Hugging Face model storage.
 
 ## Third-party terms
 
-Both local engines run through the
+Qwen3-ASR and SenseVoice run through the
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) Swift package and its ONNX
 Runtime dependency, and use model archives published by the sherpa-onnx project:
-Qwen3-ASR 0.6B INT8 and SenseVoice Small. Earlier versions of NoType used
-WhisperKit, which is no longer a dependency.
+Qwen3-ASR 0.6B INT8 and SenseVoice Small. R2T2 uses the
+[llama.cpp](https://github.com/ggml-org/llama.cpp) XCFramework and the
+[Confucius4-R2T2](https://github.com/netease-youdao/Confucius4-R2T2) model files.
+Earlier versions of NoType used WhisperKit, which is no longer a dependency.

@@ -4,6 +4,16 @@ All notable user-facing changes to NoType are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- Added **R2T2 Streaming (Experimental)** using the Confucius4-R2T2 Q4_K_M GGUF model with the
+  Q8_0 audio projector through llama.cpp and Metal. Audio is transcribed into an internal stable
+  buffer at a 320 ms cadence while recording; it is never live-inserted into the focused field.
+  Stopping finalizes the buffer through the existing Insert + Copy, Insert Only, or Copy Only
+  pipeline. The optional overlay can show the stable preview without affecting text delivery.
+- Added a strict shared Hugging Face model-store guard. Qwen3-ASR, SenseVoice, and R2T2 downloads
+  validate their configured, staging, and resolved filesystem paths before storing model files.
+
 ### Fixed
 
 - Fixed a shortcut lockout after macOS drops a modifier-key release event. Shortcut state now
@@ -22,7 +32,7 @@ Release: [v0.4.0](https://github.com/ycl-2004/NoType/releases/tag/v0.4.0)
 - Added transcription through the on-device speech engine built into macOS 26, selectable as **Engine → macOS Speech (fast)** in the menu bar. It does not translate, does not emit subtitle sign-off hallucinations, and returns a transcript far sooner than the local model. Like the local model, it runs entirely on the Mac.
 - Added an engine choice that persists across launches. When macOS Speech is selected, **Auto (中英混说) uses Qwen3-ASR** because the system recognizer cannot detect the spoken language; the menu shows this as `Engine: macOS Speech (fast) → Qwen3-ASR 0.6B INT8` when it applies. See [ADR-004](docs/decisions/004-two-engine-routing.md).
 - Added **SenseVoice Small** as a third selectable local engine through sherpa-onnx. It supports Chinese, Cantonese, English, Japanese, and Korean, keeps one ONNX model copy under `~/Documents/huggingface/models/k2-fsa`, and is loaded only when selected. See [ADR-006](docs/decisions/006-sensevoice-engine-and-model-storage.md).
-- Added **Manage Downloaded Models** under the engine menu. Deletion is confirmed before removing NoType's downloaded Qwen3-ASR or SenseVoice folders; macOS Speech system assets and unrelated Hugging Face models are never targeted.
+- Added **Manage Downloaded Models** under the engine menu. Deletion is confirmed before removing NoType's downloaded Qwen3-ASR, SenseVoice, or R2T2 folders; macOS Speech system assets and unrelated Hugging Face models are never targeted.
 - Added a live local-model status section to Diagnostics with Preparing, Ready, and Failed states, first-launch guidance, failure details, and retry support without requiring the debug log.
 - Added user-recorded shortcuts for dictation and recognition-mode cycling. Each action can have multiple shortcuts, each shortcut can use a regular key or modifier combination with single or double press activation, and left/right modifier keys are kept distinct. Dictation defaults to Double Command; recognition-mode shortcuts are off by default.
 

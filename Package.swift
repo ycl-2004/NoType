@@ -18,8 +18,14 @@ let package = Package(
             name: "Typeless",
             dependencies: [
                 .product(name: "sherpa-onnx", package: "sherpa-onnx"),
+                "LlamaFramework",
             ],
             path: "Sources/Typeless"
+        ),
+        .binaryTarget(
+            name: "LlamaFramework",
+            url: "https://github.com/ggml-org/llama.cpp/releases/download/b11102/llama-b11102-xcframework.zip",
+            checksum: "00fa4137b5e8e5821ec9a01ab1e7c2bd6cc7329637b5308369ce64437f9693b7"
         ),
         .testTarget(
             name: "TypelessTests",

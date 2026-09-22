@@ -36,6 +36,32 @@ struct TranscriptionEngineRoutingTests {
     }
 
     @Test
+    func routingEnablesStreamingOnlyForTheExperimentalR2T2Engine() async throws {
+        let appState = AppState(userDefaults: makeIsolatedDefaults())
+        let r2t2 = RoutingStreamingSpyEngine()
+        let router = RoutingTranscriptionEngine(
+            appState: appState,
+            makeAppleEngine: { nil },
+            makeR2T2Engine: { r2t2 }
+        )
+
+        #expect(router.canStream == false)
+        appState.setTranscriptionEngine(.r2t2)
+        #expect(router.canStream)
+
+        let sink = try await router.beginStreaming(
+            language: .mixed,
+            chineseScriptPreference: .followModel
+        )
+        sink([0.1, 0.2, 0.3])
+        let result = try await router.finishStreaming()
+
+        #expect(r2t2.beginCount == 1)
+        #expect(r2t2.chunkCount == 1)
+        #expect(result.text == "streamed")
+    }
+
+    @Test
     func routerSendsSenseVoiceDictationToSenseVoice() async throws {
         let appState = AppState(userDefaults: makeIsolatedDefaults())
         appState.setTranscriptionEngine(.senseVoice)
@@ -191,6 +217,44 @@ private final class RoutingSpyEngine: TranscriptionEngine {
     func prewarm() async {
         prewarmCount += 1
     }
+}
+
+@MainActor
+private final class RoutingStreamingSpyEngine: StreamingTranscriptionEngine {
+    let canStream = true
+    private(set) var beginCount = 0
+    private(set) var chunkCount = 0
+
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
+        TranscriptResult(text: "streamed")
+    }
+
+    func prewarm() async {}
+
+    func beginStreaming(
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> @Sendable ([Float]) -> Void {
+        beginCount += 1
+        return { [weak self] samples in
+            Task { @MainActor [weak self] in
+                guard let self, samples.isEmpty == false else { return }
+                self.chunkCount += 1
+            }
+        }
+    }
+
+    func finishStreaming() async throws -> TranscriptResult {
+        // The sink is scheduled through a Task so allow the main actor one turn to process it.
+        await Task.yield()
+        return TranscriptResult(text: "streamed")
+    }
+
+    func cancelStreaming() {}
 }
 
 @MainActor

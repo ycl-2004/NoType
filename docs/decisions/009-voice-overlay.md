@@ -13,7 +13,7 @@ must appear immediately, with no appearance-delay control.
 
 ## Decision
 
-Use a 160 × 40 pt SwiftUI capsule hosted in an AppKit nonactivating NSPanel. Position it 20 pt
+Use a 360 × 58 pt SwiftUI capsule hosted in an AppKit nonactivating NSPanel. Position it 20 pt
 above the starting screen's visible bottom edge, so a visible Dock is respected. Keep that screen
 for the session; recompute placement when display parameters change. The panel joins Spaces and
 full-screen apps, cannot become key or main, and passes mouse input through.

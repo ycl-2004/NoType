@@ -11,6 +11,11 @@ final class Qwen3ASRModelInstaller: Qwen3ASRModelInstalling {
     private var installationTask: Task<URL, Error>?
 
     func installIfNeeded(progress: @escaping @MainActor (String) -> Void) async throws -> URL? {
+        if let locationError = HuggingFaceModelStore.locationValidationError(
+            for: Qwen3ASRPaths.sharedModelBaseFolder
+        ) {
+            throw TranscriptionError.modelUnavailable(locationError)
+        }
         if Qwen3ASRPaths.modelFolderExists {
             return Qwen3ASRPaths.modelFolder
         }
@@ -41,6 +46,10 @@ final class Qwen3ASRModelInstaller: Qwen3ASRModelInstalling {
             ".\(Qwen3ASRPaths.modelPackageName).extract",
             isDirectory: true
         )
+
+        if let locationError = HuggingFaceModelStore.locationValidationError(for: baseFolder) {
+            throw TranscriptionError.modelUnavailable(locationError)
+        }
 
         try fileManager.createDirectory(at: baseFolder, withIntermediateDirectories: true)
         try? fileManager.removeItem(at: archiveURL)

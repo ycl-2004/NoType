@@ -18,12 +18,15 @@ struct VoiceOverlayTests {
         defer { defaults.removePersistentDomain(forName: name) }
         let state = AppState(userDefaults: defaults)
         #expect(state.showsVoiceOverlay)
+        #expect(state.showsLiveTranscript)
         #expect(state.voiceOverlayTiming == VoiceOverlayTiming(successDuration: 1.5, failureDuration: 1.5))
         state.showsVoiceOverlay = false
+        state.showsLiveTranscript = false
         state.setVoiceOverlayDuration(0, forFailure: false)
         state.setVoiceOverlayDuration(5, forFailure: true)
         let restored = AppState(userDefaults: defaults)
         #expect(!restored.showsVoiceOverlay)
+        #expect(!restored.showsLiveTranscript)
         #expect(restored.voiceOverlayTiming.successDuration == 0)
         #expect(restored.voiceOverlayTiming.failureDuration == 5)
     }
@@ -89,6 +92,16 @@ struct VoiceOverlayTests {
         let toggle = try #require(controller.makeMenu().items.first { $0.title == "Show Voice Overlay" })
         #expect(NSApplication.shared.sendAction(try #require(toggle.action), to: toggle.target, from: toggle))
         #expect(!state.showsVoiceOverlay)
+    }
+
+    @Test
+    func liveTranscriptPreviewIsDisplayOnlyAndClearsOutsideRecording() {
+        let state = makeOverlayState()
+        state.update(for: .recording)
+        state.setLiveTranscript("  hello from the live buffer  ")
+        #expect(state.liveTranscriptPreview == "hello from the live buffer")
+        state.update(for: .transcribing)
+        #expect(state.liveTranscriptPreview == nil)
     }
 }
 
@@ -186,6 +199,7 @@ struct VoiceOverlayWindowTests {
         let controller = VoiceOverlayController(appState: state)
         defer { controller.close() }
         state.update(for: .recording)
+        state.setLiveTranscript("这是一段足够长的实时转录内容，用来确认 overlay 保持单行并持续向左滚动")
         for level in [0.25, 0.6, 0.95, 0.65, 0.35] { state.appendVoiceAudioLevel(level) }
         for status in [VoiceOverlayStatus.recording, .transcribing, .inserted, .copied, .insertionFailed] {
             state.setVoiceOverlayStatus(status)

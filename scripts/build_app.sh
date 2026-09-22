@@ -5,7 +5,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE_NAME="NoType"
 EXECUTABLE_NAME="noType"
-BUILD_DIR="$ROOT_DIR/.build/arm64-apple-macosx/release"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_BUNDLE_NAME.app"
 LEGACY_APP_DIR="$DIST_DIR/$EXECUTABLE_NAME.app"
@@ -28,6 +27,7 @@ done
 echo "Building release binary..."
 cd "$ROOT_DIR"
 swift build -c release
+BUILD_DIR="$(swift build -c release --show-bin-path)"
 
 echo "Creating app bundle at $APP_DIR"
 if [[ "$LEGACY_APP_DIR" != "$APP_DIR" ]]; then
@@ -42,6 +42,9 @@ cp "$BUILD_DIR/$EXECUTABLE_NAME" "$MACOS_DIR/$EXECUTABLE_NAME"
 chmod +x "$MACOS_DIR/$EXECUTABLE_NAME"
 
 find "$BUILD_DIR" -maxdepth 1 -name '*.bundle' -exec cp -R {} "$RESOURCES_DIR/" \;
+if [[ -d "$BUILD_DIR/llama.framework" ]]; then
+  cp -R "$BUILD_DIR/llama.framework" "$MACOS_DIR/"
+fi
 
 if [[ -n "$ICON_SOURCE" ]]; then
   ICON_WIDTH="$(sips -g pixelWidth "$ICON_SOURCE" | awk '/pixelWidth:/ { print $2 }')"
@@ -87,10 +90,13 @@ if [[ -n "$ICON_SOURCE" ]]; then
     "$ASSET_CATALOG_DIR"
 fi
 
+SIGNING_IDENTITY="${CODESIGN_IDENTITY:--}"
+find "$MACOS_DIR" -maxdepth 1 -type d -name '*.framework' \
+  -exec codesign --force --deep --sign "$SIGNING_IDENTITY" {} \;
+
 touch "$APP_DIR"
 
 echo "Signing app bundle..."
-SIGNING_IDENTITY="${CODESIGN_IDENTITY:--}"
 codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_DIR"
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 

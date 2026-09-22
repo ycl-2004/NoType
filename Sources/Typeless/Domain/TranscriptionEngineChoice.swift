@@ -14,6 +14,7 @@ enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
     case appleSpeech
     case qwen3ASR
     case senseVoice
+    case r2t2
 
     /// macOS 26 is where `SpeechAnalyzer` first ships. Below it there is nothing to choose between.
     static var isAppleSpeechAvailable: Bool {
@@ -33,6 +34,8 @@ enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
             "Qwen3-ASR 0.6B INT8"
         case .senseVoice:
             "SenseVoice Small"
+        case .r2t2:
+            "R2T2 Streaming (Experimental)"
         }
     }
 
@@ -44,6 +47,8 @@ enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
             "Qwen3-ASR 0.6B INT8 model"
         case .senseVoice:
             "SenseVoice Small model"
+        case .r2t2:
+            "Confucius4-R2T2 Q4_K_M streaming model"
         }
     }
 

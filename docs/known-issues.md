@@ -71,18 +71,19 @@ model adds materially to latency and bundle size. Not a change to make casually.
 
 ## Open: session behaviour
 
-### 7. No history, no cancel, no streaming
+### 7. No history and no cancel
 
 - Only `lastTranscriptPreview` survives, truncated to 120 characters. A transcript that is inserted
   into the wrong place or overwritten cannot be recovered.
-- In-progress feedback is now available through the optional bottom-center voice overlay, with
+- In-progress feedback is available through the optional bottom-center voice overlay, with
   a waveform driven by microphone levels, processing status, and configurable result duration.
-  There is still no elapsed-time display.
+  Experimental R2T2 can also show its stable in-progress transcript there, but there is still no
+  elapsed-time display.
 - Recording can only be stopped-and-transcribed. There is no way to abandon a session.
-- Transcription is batch-only; nothing appears until the whole clip is processed.
 
 **Direction.** These are independent features rather than defects. Cancellation is the cheapest and
-probably the most useful of the remaining three.
+probably the most useful of the remaining two. R2T2's first streaming implementation deliberately
+keeps live text out of the focused field; all engines still finalize through the same output pipeline.
 
 ---
 

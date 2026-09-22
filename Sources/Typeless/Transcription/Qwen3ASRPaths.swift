@@ -49,10 +49,15 @@ enum Qwen3ASRPaths {
     }
 
     static var modelFolderExists: Bool {
-        requiredPaths.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+        locationValidationError() == nil && requiredPaths.allSatisfy {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
     }
 
     static func validationError() -> String? {
+        if let locationError = locationValidationError() {
+            return locationError
+        }
         guard FileManager.default.fileExists(atPath: modelFolder.path) else {
             return "Qwen3-ASR model is missing at \(displayPath(modelFolder))"
         }
@@ -73,6 +78,13 @@ enum Qwen3ASRPaths {
         }
 
         return nil
+    }
+
+    static func locationValidationError() -> String? {
+        HuggingFaceModelStore.locationValidationError(
+            for: sharedModelBaseFolder,
+            requiredPaths: requiredPaths
+        )
     }
 
     static func displayPath(_ url: URL) -> String {

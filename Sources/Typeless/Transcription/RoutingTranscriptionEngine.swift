@@ -10,16 +10,23 @@ import Foundation
 /// Speech never pays for loading either local model, which is the whole reason the fast path is
 /// worth having.
 @MainActor
-final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadinessReporting {
+final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModelReadinessReporting {
     var onModelReadinessChange: ((LocalModelReadiness) -> Void)?
 
     private let appState: AppState
     private let makeAppleEngine: () -> TranscriptionEngine?
     private let makeQwen3ASREngine: () -> TranscriptionEngine
     private let makeSenseVoiceEngine: () -> TranscriptionEngine
+    private let makeR2T2Engine: () -> TranscriptionEngine
     private var appleEngine: TranscriptionEngine?
     private var qwen3ASREngine: TranscriptionEngine?
     private var senseVoiceEngine: TranscriptionEngine?
+    private var r2t2Engine: TranscriptionEngine?
+    private var activeStreamingEngine: StreamingTranscriptionEngine?
+
+    var canStream: Bool {
+        appState.selectedTranscriptionEngine == .r2t2
+    }
 
     init(
         appState: AppState,
@@ -28,12 +35,14 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
             return nil
         },
         makeQwen3ASREngine: @escaping () -> TranscriptionEngine = { Qwen3ASRTranscriptionEngine() },
-        makeSenseVoiceEngine: @escaping () -> TranscriptionEngine = { SenseVoiceTranscriptionEngine() }
+        makeSenseVoiceEngine: @escaping () -> TranscriptionEngine = { SenseVoiceTranscriptionEngine() },
+        makeR2T2Engine: (() -> TranscriptionEngine)? = nil
     ) {
         self.appState = appState
         self.makeAppleEngine = makeAppleEngine
         self.makeQwen3ASREngine = makeQwen3ASREngine
         self.makeSenseVoiceEngine = makeSenseVoiceEngine
+        self.makeR2T2Engine = makeR2T2Engine ?? { R2T2TranscriptionEngine(appState: appState) }
     }
 
     func transcribe(
@@ -64,6 +73,36 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
         await engine(for: choice).prewarm()
     }
 
+    func beginStreaming(
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> @Sendable ([Float]) -> Void {
+        guard canStream,
+              let engine = engine(for: .r2t2) as? StreamingTranscriptionEngine,
+              engine.canStream else {
+            throw TranscriptionError.engineUnavailable
+        }
+        let sink = try await engine.beginStreaming(
+            language: language,
+            chineseScriptPreference: chineseScriptPreference
+        )
+        activeStreamingEngine = engine
+        return sink
+    }
+
+    func finishStreaming() async throws -> TranscriptResult {
+        guard let activeStreamingEngine else {
+            throw TranscriptionError.failed("Streaming transcription session is missing")
+        }
+        defer { self.activeStreamingEngine = nil }
+        return try await activeStreamingEngine.finishStreaming()
+    }
+
+    func cancelStreaming() {
+        activeStreamingEngine?.cancelStreaming()
+        activeStreamingEngine = nil
+    }
+
     private func engine(for choice: TranscriptionEngineChoice) -> TranscriptionEngine {
         switch choice {
         case .appleSpeech:
@@ -90,6 +129,13 @@ final class RoutingTranscriptionEngine: TranscriptionEngine, LocalModelReadiness
             let created = makeSenseVoiceEngine()
             bindReadiness(of: created)
             senseVoiceEngine = created
+            return created
+
+        case .r2t2:
+            if let r2t2Engine { return r2t2Engine }
+            let created = makeR2T2Engine()
+            bindReadiness(of: created)
+            r2t2Engine = created
             return created
         }
     }

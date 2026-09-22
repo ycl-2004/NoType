@@ -594,6 +594,34 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func uncertainDirectInsertCopiesWithoutPastingAgain() async {
+        let appState = makeTestAppState()
+        appState.setSuccessStatusMode(.transcriptInserted)
+        let recorder = StubAudioRecorder()
+        let fallback = StubFallbackInserter()
+        let clipboardStore = StubClipboardStore()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello 你好")),
+            focusedTextInserter: UncertainFocusedTextInserter(),
+            fallbackTextInserter: fallback,
+            clipboardStore: clipboardStore
+        )
+        appState.update(for: .recording)
+        try? await recorder.startRecording()
+
+        await coordinator.toggleDictation()
+
+        #expect(clipboardStore.text == "Hello 你好")
+        #expect(fallback.pastedText == nil)
+        #expect(appState.statusText == "Insertion uncertain, transcript copied")
+        #expect(appState.voiceOverlayStatus == .copied)
+    }
+
+    @Test
     func bothModeFallbackStillLeavesTranscriptInClipboard() async {
         let appState = makeTestAppState()
         appState.setSuccessStatusMode(.both)
@@ -974,6 +1002,20 @@ private struct FailingFocusedTextInserter: FocusedTextInserter {
     func insert(_ text: String, into target: FocusedInputTarget) throws {
         throw InsertionError.unsupportedFocusedElement
     }
+}
+
+private struct UncertainFocusedTextInserter: FocusedTextInserter {
+    func captureTarget() -> FocusedInputTarget? { nil }
+
+    func insert(_ text: String) throws {
+        throw InsertionError.insertionMayHaveSucceeded
+    }
+
+    func insert(_ text: String, into target: FocusedInputTarget) throws {
+        throw InsertionError.insertionMayHaveSucceeded
+    }
+
+    func canPaste(into target: FocusedInputTarget) -> Bool { true }
 }
 
 private struct FailedDeliveryStore: ClipboardStoring, FallbackTextInserter {

@@ -79,6 +79,16 @@ final class MenuBarController: NSObject {
         overlayItem.state = appState.showsVoiceOverlay ? .on : .off
         menu.addItem(overlayItem)
 
+        let liveTranscriptItem = NSMenuItem(
+            title: "Show Live Transcript",
+            action: #selector(handleToggleLiveTranscript),
+            keyEquivalent: ""
+        )
+        liveTranscriptItem.target = self
+        liveTranscriptItem.state = appState.showsLiveTranscript ? .on : .off
+        liveTranscriptItem.isEnabled = appState.showsVoiceOverlay
+        menu.addItem(liveTranscriptItem)
+
         let overlayTimingItem = NSMenuItem(title: "Overlay Timing", action: nil, keyEquivalent: "")
         overlayTimingItem.submenu = voiceOverlayTimingMenu()
         menu.addItem(overlayTimingItem)
@@ -181,7 +191,7 @@ final class MenuBarController: NSObject {
     func transcriptionEngineMenu() -> NSMenu {
         let menu = NSMenu()
 
-        for engine in TranscriptionEngineChoice.allCases {
+        for engine in TranscriptionEngineChoice.allCases where engine != .r2t2 {
             let item = NSMenuItem(
                 title: engine.menuTitle,
                 action: #selector(handleTranscriptionEngineSelection(_:)),
@@ -194,6 +204,21 @@ final class MenuBarController: NSObject {
             item.isEnabled = engine != .appleSpeech || TranscriptionEngineChoice.isAppleSpeechAvailable
             menu.addItem(item)
         }
+
+        menu.addItem(.separator())
+        let experimentalLabel = NSMenuItem(title: "Experimental", action: nil, keyEquivalent: "")
+        experimentalLabel.isEnabled = false
+        menu.addItem(experimentalLabel)
+
+        let r2t2Item = NSMenuItem(
+            title: TranscriptionEngineChoice.r2t2.menuTitle,
+            action: #selector(handleTranscriptionEngineSelection(_:)),
+            keyEquivalent: ""
+        )
+        r2t2Item.target = self
+        r2t2Item.representedObject = TranscriptionEngineChoice.r2t2.rawValue
+        r2t2Item.state = appState.selectedTranscriptionEngine == .r2t2 ? .on : .off
+        menu.addItem(r2t2Item)
 
         menu.addItem(.separator())
 
@@ -545,6 +570,11 @@ final class MenuBarController: NSObject {
     @objc
     private func handleToggleVoiceOverlay() {
         appState.showsVoiceOverlay.toggle()
+    }
+
+    @objc
+    private func handleToggleLiveTranscript() {
+        appState.showsLiveTranscript.toggle()
     }
 
     @objc

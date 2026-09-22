@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
         static let dictationShortcuts = "dictationShortcuts"
         static let recognitionModeShortcuts = "recognitionModeShortcuts"
         static let showsVoiceOverlay = "showsVoiceOverlay"
+        static let showsLiveTranscript = "showsLiveTranscript"
         static let overlaySuccessDuration = "overlaySuccessDuration"
         static let overlayFailureDuration = "overlayFailureDuration"
     }
@@ -36,6 +37,13 @@ final class AppState: ObservableObject {
             onChange?()
         }
     }
+    @Published var showsLiveTranscript: Bool {
+        didSet {
+            userDefaults.set(showsLiveTranscript, forKey: DefaultsKey.showsLiveTranscript)
+            onChange?()
+        }
+    }
+    @Published private(set) var liveTranscriptPreview: String?
     @Published private(set) var localModelReadiness: LocalModelReadiness = .waiting
     @Published var selectedRecognitionLanguage: DictationRecognitionLanguage {
         didSet {
@@ -78,6 +86,8 @@ final class AppState: ObservableObject {
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         showsVoiceOverlay = userDefaults.object(forKey: DefaultsKey.showsVoiceOverlay) as? Bool ?? true
+        showsLiveTranscript = userDefaults.object(forKey: DefaultsKey.showsLiveTranscript) as? Bool ?? true
+        liveTranscriptPreview = nil
         voiceOverlayTiming = VoiceOverlayTiming(
             successDuration: userDefaults.object(forKey: DefaultsKey.overlaySuccessDuration) as? Double
                 ?? VoiceOverlayTiming.defaultDuration,
@@ -101,6 +111,7 @@ final class AppState: ObservableObject {
     func update(for state: DictationState) {
         dictationState = state
         if state != .recording { resetVoiceAudioLevels() }
+        if state != .recording { liveTranscriptPreview = nil }
         voiceOverlayStatus = switch state {
         case .idle: .hidden
         case .recording: .recording
@@ -156,6 +167,11 @@ final class AppState: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         lastTranscriptPreview = trimmed.isEmpty ? nil : String(trimmed.prefix(120))
         onChange?()
+    }
+
+    func setLiveTranscript(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        liveTranscriptPreview = trimmed.isEmpty ? nil : String(trimmed.prefix(240))
     }
 
     func setDebugMessage(_ message: String) {

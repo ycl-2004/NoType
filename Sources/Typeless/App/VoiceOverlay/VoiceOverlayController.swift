@@ -74,6 +74,12 @@ final class VoiceOverlayController {
         guard let duration = timing.duration(for: status), let resultStartedAt else { return }
         // Editing the setting uses the original result time; it never restarts the countdown.
         let remaining = max(Duration.zero, .seconds(duration) - resultStartedAt.duration(to: .now))
+        if remaining == .zero {
+            // A zero-duration category is an immediate preference, not a best-effort async sleep.
+            // Updating synchronously also prevents a busy main actor from reviving a hidden result.
+            appState.setVoiceOverlayStatus(.hidden)
+            return
+        }
         dismissalTask = Task { [weak self] in
             // The fade is included in the selected duration, including the 5-second cap.
             let fade = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? Duration.zero : min(.milliseconds(180), remaining)

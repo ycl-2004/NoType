@@ -3,6 +3,7 @@ import Foundation
 enum DownloadedLocalModel: String, CaseIterable, Equatable {
     case qwen3ASR
     case senseVoice
+    case r2t2
 
     var menuTitle: String {
         switch self {
@@ -10,6 +11,8 @@ enum DownloadedLocalModel: String, CaseIterable, Equatable {
             "Qwen3-ASR 0.6B INT8"
         case .senseVoice:
             "SenseVoice Small"
+        case .r2t2:
+            "R2T2 Streaming (Experimental)"
         }
     }
 
@@ -19,6 +22,8 @@ enum DownloadedLocalModel: String, CaseIterable, Equatable {
             "The Qwen3-ASR 0.6B INT8 copy in ~/Documents/huggingface/models/k2-fsa"
         case .senseVoice:
             "The SenseVoice copy in ~/Documents/huggingface"
+        case .r2t2:
+            "The Confucius4-R2T2 GGUF and Q8_0 projector in ~/Documents/huggingface/models/mradermacher"
         }
     }
 }
@@ -61,6 +66,8 @@ final class LocalModelManager: LocalModelRemoving {
             [Qwen3ASRPaths.modelFolder]
         case .senseVoice:
             [SenseVoicePaths.modelFolder]
+        case .r2t2:
+            [R2T2Paths.modelFolder]
         }
     }
 }

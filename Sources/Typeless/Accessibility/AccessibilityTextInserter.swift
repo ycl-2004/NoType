@@ -3,13 +3,24 @@ import AppKit
 
 @MainActor
 struct AccessibilityTextInserter: FocusedTextInserter {
+    private enum WriteResult {
+        case notAttempted
+        case written
+        case uncertain
+    }
+
     // Terminal AX values describe screen output, not an editable document. Writing the whole
     // value cannot reliably type into the shell; use the normal paste command instead.
     private func isTerminal(_ element: AXUIElement) -> Bool {
         var pid: pid_t = 0
         guard AXUIElementGetPid(element, &pid) == .success else { return false }
         let identifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
-        return ["com.apple.Terminal", "com.mitchellh.ghostty", "com.googlecode.iterm2"].contains(identifier)
+        return [
+            "com.apple.Terminal",
+            "com.cmuxterm.app",
+            "com.mitchellh.ghostty",
+            "com.googlecode.iterm2"
+        ].contains(identifier)
     }
 
     func canPaste(into target: FocusedInputTarget) -> Bool {
@@ -73,12 +84,22 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         if isTerminal(element) {
             throw InsertionError.unsupportedFocusedElement
         }
-        if try replaceSelectedText(in: element, with: text, capturedValue: capturedValue) {
+        switch try replaceSelectedText(in: element, with: text, capturedValue: capturedValue) {
+        case .written:
             return
+        case .uncertain:
+            throw InsertionError.insertionMayHaveSucceeded
+        case .notAttempted:
+            break
         }
 
-        if try appendText(text, to: element, capturedValue: capturedValue) {
+        switch try appendText(text, to: element, capturedValue: capturedValue) {
+        case .written:
             return
+        case .uncertain:
+            throw InsertionError.insertionMayHaveSucceeded
+        case .notAttempted:
+            break
         }
 
         throw InsertionError.unsupportedFocusedElement
@@ -88,55 +109,61 @@ struct AccessibilityTextInserter: FocusedTextInserter {
         in element: AXUIElement,
         with text: String,
         capturedValue: String?
-    ) throws -> Bool {
+    ) throws -> WriteResult {
         guard let currentValue = copyStringAttribute(kAXValueAttribute, from: element),
               let selectedRange = copySelectedRange(from: element) else {
-            return false
+            return .notAttempted
         }
 
         if let capturedValue, capturedValue != currentValue {
-            return false
+            return .notAttempted
         }
 
         let currentNSString = currentValue as NSString
         guard selectedRange.location != NSNotFound,
               selectedRange.location <= currentNSString.length,
               selectedRange.location + selectedRange.length <= currentNSString.length else {
-            return false
+            return .notAttempted
         }
 
         let updatedValue = currentNSString.replacingCharacters(in: selectedRange, with: text)
         guard setStringAttribute(kAXValueAttribute, value: updatedValue, on: element) else {
-            return false
+            return .notAttempted
         }
 
         let newCaretLocation = selectedRange.location + (text as NSString).length
         let newRange = NSRange(location: newCaretLocation, length: 0)
-        _ = setSelectedRange(newRange, on: element)
-        return verifyValue(updatedValue, on: element)
+        guard setSelectedRange(newRange, on: element) else {
+            AppLogger.log("insert: accessibility write landed but caret update was not accepted")
+            return .uncertain
+        }
+        return verifyValue(updatedValue, on: element) ? .written : .uncertain
     }
 
     private func appendText(
         _ text: String,
         to element: AXUIElement,
         capturedValue: String?
-    ) throws -> Bool {
+    ) throws -> WriteResult {
         guard let currentValue = copyStringAttribute(kAXValueAttribute, from: element) else {
-            return false
+            return .notAttempted
         }
 
         if let capturedValue, capturedValue != currentValue {
-            return false
+            return .notAttempted
         }
 
         let updatedValue = currentValue + text
         guard setStringAttribute(kAXValueAttribute, value: updatedValue, on: element) else {
-            return false
+            return .notAttempted
         }
 
         let endLocation = (updatedValue as NSString).length
-        _ = setSelectedRange(NSRange(location: endLocation, length: 0), on: element)
-        return verifyValue(updatedValue, on: element)
+        guard setSelectedRange(NSRange(location: endLocation, length: 0), on: element) else {
+            AppLogger.log("insert: accessibility append landed but caret update was not accepted")
+            return .uncertain
+        }
+        return verifyValue(updatedValue, on: element) ? .written : .uncertain
     }
 
     private func copyStringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
@@ -195,7 +222,7 @@ struct AccessibilityTextInserter: FocusedTextInserter {
 
     private func verifyValue(_ expectedValue: String, on element: AXUIElement) -> Bool {
         guard copyStringAttribute(kAXValueAttribute, from: element) == expectedValue else {
-            AppLogger.log("insert: accessibility write verification failed")
+            AppLogger.log("insert: accessibility write verification failed; suppressing paste fallback")
             return false
         }
 

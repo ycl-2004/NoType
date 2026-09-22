@@ -5,7 +5,7 @@ struct VoiceOverlayView: View {
     let status: VoiceOverlayStatus
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let size = CGSize(width: 160, height: 40)
+    static let size = CGSize(width: 360, height: 48)
 
     private var accent: Color {
         if status.isFailure { return Color(red: 0.96, green: 0.51, blue: 0.45) }
@@ -16,17 +16,31 @@ struct VoiceOverlayView: View {
     var body: some View {
         HStack(spacing: 12) {
             indicator.frame(width: 24, height: 24)
-            Text(status.text)
-                .font(.system(size: 14, weight: .semibold))
-                .lineLimit(1)
-                .fixedSize()
+            if status == .recording,
+               appState.showsLiveTranscript,
+               let liveTranscript = appState.liveTranscriptPreview {
+                HStack(spacing: 8) {
+                    Text(status.text)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                    MarqueeText(text: liveTranscript)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: Self.size.width - 54, alignment: .leading)
+            } else {
+                Text(status.text)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .foregroundStyle(Color(white: 0.94))
         .frame(width: Self.size.width, height: Self.size.height)
         .background(Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.96), in: Capsule())
         .overlay(Capsule().strokeBorder(accent.opacity(0.9), lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(status.text)
+        .accessibilityLabel(appState.liveTranscriptPreview.map { "\(status.text): \($0)" } ?? status.text)
     }
 
     @ViewBuilder
@@ -54,6 +68,83 @@ struct VoiceOverlayView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(accent)
         }
+    }
+}
+
+private struct MarqueeText: View {
+    private static let gap: CGFloat = 44
+    private static let speed: CGFloat = 34
+
+    let text: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var textWidth: CGFloat = 0
+    @State private var animationStart = Date()
+
+    var body: some View {
+        GeometryReader { proxy in
+            let shouldScroll = textWidth > proxy.size.width + 1
+            ZStack(alignment: .leading) {
+                if shouldScroll && !reduceMotion {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                        let cycle = textWidth + Self.gap
+                        let elapsed = max(0, context.date.timeIntervalSince(animationStart))
+                        let distance = cycle > 0
+                            ? (elapsed * Self.speed).truncatingRemainder(dividingBy: cycle)
+                            : 0
+                        HStack(spacing: Self.gap) {
+                            label
+                            label
+                        }
+                        .fixedSize()
+                        .offset(x: -distance)
+                    }
+                } else {
+                    Text(text)
+                        .font(.system(size: 12, weight: .regular))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+            }
+            .frame(width: proxy.size.width, height: 18, alignment: .leading)
+            .clipped()
+        }
+        .frame(height: 18)
+        .background(
+            Text(text)
+                .font(.system(size: 12, weight: .regular))
+                .lineLimit(1)
+                .fixedSize()
+                .hidden()
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: MarqueeTextWidthKey.self, value: proxy.size.width)
+                    }
+                )
+        )
+        .onPreferenceChange(MarqueeTextWidthKey.self) { width in
+            guard abs(textWidth - width) > 0.5 else { return }
+            textWidth = width
+            animationStart = .now
+        }
+        .onChange(of: text) { _, _ in
+            animationStart = .now
+        }
+        .accessibilityLabel(text)
+    }
+
+    private var label: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .regular))
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
+private struct MarqueeTextWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

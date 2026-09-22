@@ -11,6 +11,11 @@ final class SenseVoiceModelInstaller: SenseVoiceModelInstalling {
     private var installationTask: Task<URL, Error>?
 
     func installIfNeeded(progress: @escaping @MainActor (String) -> Void) async throws -> URL? {
+        if let locationError = HuggingFaceModelStore.locationValidationError(
+            for: SenseVoicePaths.sharedModelBaseFolder
+        ) {
+            throw TranscriptionError.modelUnavailable(locationError)
+        }
         if SenseVoicePaths.modelFolderExists {
             return SenseVoicePaths.modelFolder
         }
@@ -41,6 +46,10 @@ final class SenseVoiceModelInstaller: SenseVoiceModelInstalling {
             ".\(SenseVoicePaths.modelPackageName).extract",
             isDirectory: true
         )
+
+        if let locationError = HuggingFaceModelStore.locationValidationError(for: baseFolder) {
+            throw TranscriptionError.modelUnavailable(locationError)
+        }
 
         try fileManager.createDirectory(at: baseFolder, withIntermediateDirectories: true)
         try? fileManager.removeItem(at: archiveURL)

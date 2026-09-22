@@ -31,11 +31,15 @@ enum SenseVoicePaths {
     }
 
     static var modelFolderExists: Bool {
-        FileManager.default.fileExists(atPath: modelURL.path) &&
+        locationValidationError() == nil &&
+            FileManager.default.fileExists(atPath: modelURL.path) &&
             FileManager.default.fileExists(atPath: tokensURL.path)
     }
 
     static func validationError() -> String? {
+        if let locationError = locationValidationError() {
+            return locationError
+        }
         guard FileManager.default.fileExists(atPath: modelFolder.path) else {
             return "SenseVoice model is missing at \(displayPath(modelFolder))"
         }
@@ -46,6 +50,13 @@ enum SenseVoicePaths {
             return "SenseVoice tokenizer is missing at \(displayPath(tokensURL))"
         }
         return nil
+    }
+
+    static func locationValidationError() -> String? {
+        HuggingFaceModelStore.locationValidationError(
+            for: sharedModelBaseFolder,
+            requiredPaths: [modelURL, tokensURL]
+        )
     }
 
     static func displayPath(_ url: URL) -> String {

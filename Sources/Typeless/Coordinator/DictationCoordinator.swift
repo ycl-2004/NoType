@@ -6,6 +6,7 @@ final class DictationCoordinator {
     private enum InsertOutcome {
         case usedSelectedMode
         case copiedBecauseTargetChanged
+        case copiedBecauseInsertionWasUncertain
 
         var statusText: String {
             switch self {
@@ -13,6 +14,8 @@ final class DictationCoordinator {
                 ""
             case .copiedBecauseTargetChanged:
                 "Original chat changed, transcript copied"
+            case .copiedBecauseInsertionWasUncertain:
+                "Insertion uncertain, transcript copied"
             }
         }
 
@@ -22,6 +25,8 @@ final class DictationCoordinator {
                 "Transcript ready"
             case .copiedBecauseTargetChanged:
                 "Original input changed during dictation; transcript copied to clipboard"
+            case .copiedBecauseInsertionWasUncertain:
+                "Accessibility insertion could not be verified; transcript copied without paste to avoid duplication"
             }
         }
     }
@@ -45,6 +50,7 @@ final class DictationCoordinator {
     private var targetInput: FocusedInputTarget?
     private var recordingTimeoutTask: Task<Void, Never>?
     private var audioLevelTask: Task<Void, Never>?
+    private var activeStreamingEngine: StreamingTranscriptionEngine?
 
     /// `startDictation` awaits a microphone permission check, and the state stays `.idle` for that
     /// whole window. A second shortcut press during it used to start a second session: the first
@@ -153,7 +159,26 @@ final class DictationCoordinator {
 
         do {
             appState.setDebugMessage("Starting recorder")
-            try await audioRecorder.startRecording()
+            if let streamingEngine = transcriptionEngine as? StreamingTranscriptionEngine,
+               streamingEngine.canStream,
+               let streamingRecorder = audioRecorder as? StreamingAudioRecording {
+                let language = appState.selectedRecognitionLanguage
+                let scriptPreference = appState.selectedChineseScriptPreference
+                let sink = try await streamingEngine.beginStreaming(
+                    language: language,
+                    chineseScriptPreference: scriptPreference
+                )
+                activeStreamingEngine = streamingEngine
+                do {
+                    try await streamingRecorder.startRecording(onAudioChunk: sink)
+                } catch {
+                    activeStreamingEngine = nil
+                    streamingEngine.cancelStreaming()
+                    throw error
+                }
+            } else {
+                try await audioRecorder.startRecording()
+            }
             appState.update(for: .recording)
             startAudioLevelUpdates()
             appState.setDebugMessage("Recorder started")
@@ -163,6 +188,8 @@ final class DictationCoordinator {
             // A recorder left running by an earlier failed transition would otherwise reject every
             // future dictation. Discard it and report a state the user can act on.
             AppLogger.log("startDictation: recorder was already running, discarding the stale session")
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             if let staleClip = try? await audioRecorder.stopRecording() {
                 staleClip.deleteFile()
             }
@@ -170,10 +197,14 @@ final class DictationCoordinator {
             appState.statusText = "Ready — press again to dictate"
             appState.setDebugMessage("Discarded a stale recording session; ready to start again")
         } catch AudioSessionError.invalidInputFormat {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             appState.setError(.invalidAudioInput)
             appState.setDebugMessage("Invalid audio input format")
             AppLogger.log("startDictation: invalid audio input format")
         } catch {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             appState.setError(.noRecordedAudio)
             appState.setDebugMessage("Recorder failed: \(error.localizedDescription)")
             AppLogger.log("startDictation: recorder failed \(error.localizedDescription)")
@@ -246,6 +277,8 @@ final class DictationCoordinator {
             AppLogger.log("stopDictation: clip recorded at \(clip.fileURL.path)")
 
             if let duration = clip.duration, duration < Self.minimumClipDuration {
+                activeStreamingEngine?.cancelStreaming()
+                activeStreamingEngine = nil
                 finishWithoutInserting(
                     statusText: "Too short, nothing captured",
                     debugMessage: "Clip was \(String(format: "%.2f", duration))s, below the \(Self.minimumClipDuration)s minimum; skipped transcription"
@@ -255,11 +288,17 @@ final class DictationCoordinator {
             let recognitionLanguage = appState.selectedRecognitionLanguage
             let chineseScriptPreference = appState.selectedChineseScriptPreference
             appState.setDebugMessage("Transcribing (\(recognitionLanguage.statusDescription))")
-            let transcript = try await transcriptionEngine.transcribe(
-                clip,
-                language: recognitionLanguage,
-                chineseScriptPreference: chineseScriptPreference
-            )
+            let transcript: TranscriptResult
+            if let streamingEngine = activeStreamingEngine {
+                activeStreamingEngine = nil
+                transcript = try await streamingEngine.finishStreaming()
+            } else {
+                transcript = try await transcriptionEngine.transcribe(
+                    clip,
+                    language: recognitionLanguage,
+                    chineseScriptPreference: chineseScriptPreference
+                )
+            }
             guard transcript.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
                 finishWithoutInserting(
                     statusText: "Nothing to insert",
@@ -277,20 +316,28 @@ final class DictationCoordinator {
                 ? appState.selectedSuccessStatusMode.statusText
                 : insertOutcome.statusText
             appState.setVoiceOverlayStatus(
-                insertOutcome == .copiedBecauseTargetChanged || appState.selectedSuccessStatusMode == .transcriptCopied
+                insertOutcome == .copiedBecauseTargetChanged
+                    || insertOutcome == .copiedBecauseInsertionWasUncertain
+                    || appState.selectedSuccessStatusMode == .transcriptCopied
                     ? .copied : .inserted
             )
             appState.setDebugMessage(insertOutcome.debugMessage)
             AppLogger.log("stopDictation: transcript copied or inserted")
         } catch let error as DictationError {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             appState.setError(error)
             appState.setDebugMessage("Dictation error: \(error.userMessage)")
             AppLogger.log("stopDictation: dictation error \(error.userMessage)")
         } catch let error as TranscriptionError {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             appState.setError(.transcriptionFailed(String(describing: error)))
             appState.setDebugMessage("Transcription error")
             AppLogger.log("stopDictation: transcription error \(String(describing: error))")
         } catch let error as InsertionError {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             switch error {
             case .notTrusted:
                 appState.setError(.accessibilityPermissionRequired)
@@ -305,6 +352,8 @@ final class DictationCoordinator {
                 appState.setVoiceOverlayStatus(.copyFailed)
             }
         } catch {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
             let failedDuringInsertion = appState.dictationState == .inserting
             appState.setError(failedDuringInsertion
                 ? .insertionFailed(error.localizedDescription)
@@ -335,6 +384,9 @@ final class DictationCoordinator {
             } catch InsertionError.capturedTargetUnavailable {
                 AppLogger.log("insert: original input changed, keeping transcript in clipboard instead of inserting elsewhere")
                 return .copiedBecauseTargetChanged
+            } catch InsertionError.insertionMayHaveSucceeded {
+                AppLogger.log("insert: accessibility write may have landed; skipping paste to avoid duplicate insertion")
+                return .copiedBecauseInsertionWasUncertain
             } catch {
                 AppLogger.log("insert: direct accessibility insert failed, falling back to paste")
                 try fallbackTextInserter.paste(text, preserveClipboard: false)
@@ -360,6 +412,10 @@ final class DictationCoordinator {
                 AppLogger.log("insert: original input changed in insert-only mode, copying transcript instead of inserting into a different field")
                 try clipboardStore.setText(text)
                 return .copiedBecauseTargetChanged
+            } catch InsertionError.insertionMayHaveSucceeded {
+                AppLogger.log("insert: accessibility write may have landed in insert-only mode; copying without paste to avoid duplicate insertion")
+                try clipboardStore.setText(text)
+                return .copiedBecauseInsertionWasUncertain
             } catch {
                 AppLogger.log("insert: direct accessibility insert failed in insert-only mode, falling back to paste")
                 try fallbackTextInserter.paste(text, preserveClipboard: true)
@@ -374,6 +430,8 @@ final class DictationCoordinator {
                 AppLogger.log("insert: trying captured input target \(targetInput.debugDescription)")
                 try focusedTextInserter.insert(text, into: targetInput)
                 return
+            } catch InsertionError.insertionMayHaveSucceeded {
+                throw InsertionError.insertionMayHaveSucceeded
             } catch {
                 if focusedTextInserter.canPaste(into: targetInput) {
                     AppLogger.log("insert: original input still focused; using paste for unsupported accessibility insertion")
