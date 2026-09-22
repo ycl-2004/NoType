@@ -186,6 +186,31 @@ struct TranscriptionEngineRoutingTests {
         #expect(second.selectedTranscriptionEngine == .qwen3ASR)
     }
 
+    @Test
+    func switchingEnginesReleasesThePreviousModelButKeepsCurrentModelHot() async throws {
+        let appState = AppState(userDefaults: makeIsolatedDefaults())
+        weak var oldEngine: RoutingSpyEngine?
+        var builds = 0
+        let router = RoutingTranscriptionEngine(
+            appState: appState,
+            makeQwen3ASREngine: {
+                let engine = RoutingSpyEngine(name: "qwen")
+                oldEngine = engine
+                builds += 1
+                return engine
+            },
+            makeSenseVoiceEngine: { RoutingSpyEngine(name: "sense") }
+        )
+        appState.setTranscriptionEngine(.qwen3ASR)
+        _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
+        #expect(oldEngine != nil)
+        _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
+        #expect(builds == 1)
+        appState.setTranscriptionEngine(.senseVoice)
+        _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
+        #expect(oldEngine == nil)
+    }
+
     private func makeClip() -> RecordedAudioClip {
         RecordedAudioClip(fileURL: URL(fileURLWithPath: "/tmp/routing-test.wav"), duration: 1)
     }

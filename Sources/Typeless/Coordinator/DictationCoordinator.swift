@@ -329,6 +329,12 @@ final class DictationCoordinator {
             appState.setError(error)
             appState.setDebugMessage("Dictation error: \(error.userMessage)")
             AppLogger.log("stopDictation: dictation error \(error.userMessage)")
+        } catch let error as AudioSessionError {
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
+            appState.setError(.transcriptionFailed("Audio capture failed; incomplete recording was discarded. Please retry."))
+            appState.setDebugMessage("Audio capture error: \(error)")
+            AppLogger.log("stopDictation: audio capture failed: \(error)")
         } catch let error as TranscriptionError {
             activeStreamingEngine?.cancelStreaming()
             activeStreamingEngine = nil

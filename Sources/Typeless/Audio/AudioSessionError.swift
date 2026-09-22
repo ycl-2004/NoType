@@ -5,5 +5,6 @@ enum AudioSessionError: Error, Equatable {
     case missingOutputFile
     case alreadyRecording
     case failedToPrepareRecorder
+    case captureFailed(String)
     case invalidInputFormat
 }

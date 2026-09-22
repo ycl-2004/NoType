@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-09-22
+Accepted — 2026-09-22. Scheduling and preview semantics superseded by [ADR-011](011-r2t2-resource-and-reliability.md).
 
 ## Context
 

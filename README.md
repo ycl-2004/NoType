@@ -332,6 +332,23 @@ Security → Microphone / Accessibility**.
 
 </details>
 
+## Resource management
+
+R2T2 commits bounded audio segments and reuses their results; only the current tail is previewed.
+Long recordings are split rather than silently returned at a token limit. The current engine stays
+loaded; using a different engine releases the previous model, so switching back costs a cold load.
+R2T2 downloads are pinned and checked against publisher SHA-256 hashes before loading. Diagnostics
+explain how to remove and retry a damaged download.
+
+Debug logs are capped at 2 MiB, with up to five days retained. Temporary recordings are deleted
+after each attempt, including capture failures. Changed-target clipboard fallback is unchanged;
+clipboard managers may retain copied transcripts.
+
+After finishing development tests and packaging, run `./scripts/clean_development.sh` to remove
+build caches and old release ZIPs while keeping `dist/NoType.app` and shared models. The next build
+recreates caches and may redownload dependencies. See [ADR-011](docs/decisions/011-r2t2-resource-and-reliability.md)
+for the behavior, tradeoffs and real-model validation.
+
 ## Build from source
 
 <details>

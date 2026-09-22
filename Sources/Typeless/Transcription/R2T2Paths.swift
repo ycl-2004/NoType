@@ -7,15 +7,25 @@ import Foundation
 /// rather than the sherpa-onnx folder because they come from a different runtime and publisher.
 enum R2T2Paths {
     static let modelRepository = "mradermacher/Confucius4-R2T2-GGUF"
+    // Publisher LFS metadata: https://huggingface.co/api/models/mradermacher/Confucius4-R2T2-GGUF?blobs=true
+    static let modelRevision = "a5b8b2d84b7a429ba758ec3a67b89602540fb34a"
+    static let modelIntegrity = ModelFileIntegrity(
+        name: "R2T2 Q4_K_M", size: 1_107_405_568,
+        sha256: "d2b05e834988852106f816919293d3a51e4039b44fb5c4e074fa913f083f2c6e"
+    )
+    static let projectorIntegrity = ModelFileIntegrity(
+        name: "R2T2 Q8_0 projector", size: 355_709_696,
+        sha256: "4fd02f8bb9fdf8792ba05e4fd433a40a3296ec299ca4fa5c46ae8f068740654c"
+    )
     static let modelPackageName = "Confucius4-R2T2-GGUF"
     static let modelFileName = "Confucius4-R2T2.Q4_K_M.gguf"
     static let projectorFileName = "Confucius4-R2T2.mmproj-Q8_0.gguf"
 
     static let modelDownloadURL = URL(
-        string: "https://huggingface.co/\(modelRepository)/resolve/main/\(modelFileName)"
+        string: "https://huggingface.co/\(modelRepository)/resolve/\(modelRevision)/\(modelFileName)"
     )!
     static let projectorDownloadURL = URL(
-        string: "https://huggingface.co/\(modelRepository)/resolve/main/\(projectorFileName)"
+        string: "https://huggingface.co/\(modelRepository)/resolve/\(modelRevision)/\(projectorFileName)"
     )!
 
     /// NoType's first R2T2 experiment intentionally uses the higher-quality projector quant.

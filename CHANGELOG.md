@@ -7,14 +7,26 @@ All notable user-facing changes to NoType are recorded here.
 ### Added
 
 - Added **R2T2 Streaming (Experimental)** using the Confucius4-R2T2 Q4_K_M GGUF model with the
-  Q8_0 audio projector through llama.cpp and Metal. Audio is transcribed into an internal stable
-  buffer at a 320 ms cadence while recording; it is never live-inserted into the focused field.
+  Q8_0 audio projector through llama.cpp and Metal. Audio is transcribed into an internal
+  buffer while recording; it is never live-inserted into the focused field.
   Stopping finalizes the buffer through the existing Insert + Copy, Insert Only, or Copy Only
   pipeline. The optional overlay can show the stable preview without affecting text delivery.
 - Added a strict shared Hugging Face model-store guard. Qwen3-ASR, SenseVoice, and R2T2 downloads
   validate their configured, staging, and resolved filesystem paths before storing model files.
 
 ### Fixed
+
+- R2T2 now commits bounded audio segments, backs off tail previews, and reuses completed work.
+  Stop drains the ordered audio queue; token/context limits trigger smaller retries instead of
+  silently truncating output. Full-sequence detokenization preserves split UTF-8 characters.
+- Streaming capture errors now discard incomplete audio and report failure without changing
+  the clipboard. Temporary-file cleanup, the five-minute limit, and changed-target fallback remain.
+- R2T2 model downloads are pinned to a revision and checked against publisher size/SHA-256
+  metadata. Switching to another engine releases the previous cached model.
+- Debug logs are capped at 2 MiB and scanned hourly rather than on every event. SwiftPM and
+  XCTest runs use separate diagnostic logs.
+- Added `scripts/clean_development.sh` to remove generated builds and old ZIPs while preserving
+  the ready-to-use app and downloaded models. See [ADR-011](docs/decisions/011-r2t2-resource-and-reliability.md).
 
 - Fixed a shortcut lockout after macOS drops a modifier-key release event. Shortcut state now
   reconciles with AppKit's current modifier flags, and modifier double taps use the interval from

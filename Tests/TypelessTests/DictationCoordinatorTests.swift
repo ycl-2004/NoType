@@ -5,6 +5,30 @@ import Testing
 @MainActor
 struct DictationCoordinatorTests {
     @Test
+    func audioCaptureFailureNeverTranscribesOrTouchesClipboard() async throws {
+        let appState = makeTestAppState()
+        let engine = CallCountingTranscriptionEngine(result: .init(text: "incomplete"))
+        let clipboard = StubClipboardStore()
+        try clipboard.setText("previous")
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: FailedCaptureRecorder(),
+            transcriptionEngine: engine,
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboard
+        )
+        await coordinator.toggleDictation()
+        await coordinator.toggleDictation()
+        #expect(engine.transcribeCallCount == 0)
+        #expect(clipboard.text == "previous")
+        #expect(appState.lastError != nil)
+        #expect(appState.statusText.contains("Audio capture failed"))
+    }
+
+    @Test
     func toggleFromIdleStartsRecording() async {
         let appState = makeTestAppState()
         let coordinator = DictationCoordinator(
@@ -1045,4 +1069,11 @@ private func makeTestAppState() -> AppState {
     let defaults = UserDefaults(suiteName: suiteName)!
     defaults.removePersistentDomain(forName: suiteName)
     return AppState(userDefaults: defaults)
+}
+
+private actor FailedCaptureRecorder: AudioRecording {
+    func startRecording() async throws {}
+    func stopRecording() async throws -> RecordedAudioClip {
+        throw AudioSessionError.captureFailed("Disk is full")
+    }
 }

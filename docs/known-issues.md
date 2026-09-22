@@ -121,23 +121,12 @@ accepting a second model resident in memory. Alternatively warm it lazily on the
 
 ## Open: engineering hygiene
 
-### 9. Test runs write into the real debug log
+### Resolved on 2026-09-22: logging and streaming input errors
 
-`AppLogger` resolves a single fixed path (`<temp>/notype-debug.log`) with no injection point, so a
-`swift test` run interleaves fixture data — including `clip recorded at /tmp/fake.wav` lines — with
-genuine on-device entries. Reading the log by timestamp can therefore surface events that never
-happened on the device.
-
-**Direction.** Make the log destination injectable and point tests at a temporary path.
-
-### 10. `AudioSessionError.invalidInputFormat` is never thrown
-
-`DictationCoordinator.startDictation()` catches it and maps it to a specific user-facing error, but
-`AudioRecorder` has no path that throws it. A genuine input-format problem currently falls through
-to the generic recorder-failure branch.
-
-**Direction.** Either detect the condition in `AudioRecorder` and throw it, or delete the dead
-handling so the error surface reflects reality.
+Tests now use process-specific diagnostic logs. Production logs are capped at 2 MiB and scanned
+at most hourly unless size pressure requires maintenance. The streaming recorder validates input
+format and propagates capture/write errors on stop, deleting incomplete audio and preventing its
+insertion. See [ADR-011](decisions/011-r2t2-resource-and-reliability.md).
 
 ---
 

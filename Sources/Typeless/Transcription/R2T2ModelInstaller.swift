@@ -15,19 +15,31 @@ final class R2T2ModelInstaller: R2T2ModelInstalling {
             throw TranscriptionError.modelUnavailable(locationError)
         }
 
-        if R2T2Paths.modelFolderExists {
-            return R2T2Paths.modelFolder
-        }
         if let installationTask {
             return try await installationTask.value
         }
 
         let task = Task { @MainActor in
-            try await Self.downloadFiles(progress: progress)
+            if R2T2Paths.modelFolderExists {
+                progress("Verifying R2T2 model integrity…")
+                try await Self.verifyInstalledFiles()
+                return R2T2Paths.modelFolder
+            }
+            if FileManager.default.fileExists(atPath: R2T2Paths.modelFolder.path) {
+                throw TranscriptionError.modelUnavailable("R2T2 files are incomplete. Remove R2T2 in Manage Downloaded Models, then retry preparation.")
+            }
+            return try await Self.downloadFiles(progress: progress)
         }
         installationTask = task
         defer { installationTask = nil }
         return try await task.value
+    }
+
+    private static func verifyInstalledFiles() async throws {
+        try await Task.detached(priority: .utility) {
+            try R2T2Paths.modelIntegrity.verify(at: R2T2Paths.modelURL)
+            try R2T2Paths.projectorIntegrity.verify(at: R2T2Paths.projectorURL)
+        }.value
     }
 
     private static func downloadFiles(
@@ -36,16 +48,15 @@ final class R2T2ModelInstaller: R2T2ModelInstalling {
         let fileManager = FileManager.default
         let baseFolder = R2T2Paths.sharedModelBaseFolder
         let stagingFolder = baseFolder
-            .appendingPathComponent(".\(R2T2Paths.modelPackageName).download", isDirectory: true)
+            .appendingPathComponent(".\(R2T2Paths.modelPackageName).\(UUID().uuidString).download", isDirectory: true)
 
-        guard stagingFolder.path.hasPrefix(R2T2Paths.huggingFaceFolder.path + "/") else {
+        guard HuggingFaceModelStore.locationValidationError(for: stagingFolder) == nil else {
             throw TranscriptionError.modelUnavailable(
                 "R2T2 download staging path must be under \(R2T2Paths.displayPath(R2T2Paths.huggingFaceFolder))."
             )
         }
 
         try fileManager.createDirectory(at: baseFolder, withIntermediateDirectories: true)
-        try? fileManager.removeItem(at: stagingFolder)
         try fileManager.createDirectory(at: stagingFolder, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: stagingFolder) }
 
@@ -56,26 +67,32 @@ final class R2T2ModelInstaller: R2T2ModelInstalling {
         try await download(
             R2T2Paths.modelDownloadURL,
             to: modelStagingURL,
-            label: "R2T2 Q4_K_M model"
+            integrity: R2T2Paths.modelIntegrity
         )
         try await download(
             R2T2Paths.projectorDownloadURL,
             to: projectorStagingURL,
-            label: "R2T2 Q8_0 audio projector"
+            integrity: R2T2Paths.projectorIntegrity
         )
 
         guard R2T2Paths.locationValidationError() == nil else {
             throw TranscriptionError.modelUnavailable("R2T2 model path validation failed before installation.")
         }
 
-        try? fileManager.removeItem(at: R2T2Paths.modelFolder)
+        // Another process may have finished first. Never replace its model directory blindly.
+        if fileManager.fileExists(atPath: R2T2Paths.modelFolder.path) {
+            try await verifyInstalledFiles()
+            return R2T2Paths.modelFolder
+        }
         try fileManager.moveItem(at: stagingFolder, to: R2T2Paths.modelFolder)
         progress("R2T2 model downloaded")
         return R2T2Paths.modelFolder
     }
 
-    private static func download(_ url: URL, to destination: URL, label: String) async throws {
+    private static func download(_ url: URL, to destination: URL, integrity: ModelFileIntegrity) async throws {
+        let label = integrity.name
         let (downloadedURL, response) = try await URLSession.shared.download(from: url)
+        defer { try? FileManager.default.removeItem(at: downloadedURL) }
         if let response = response as? HTTPURLResponse,
            (200..<300).contains(response.statusCode) == false {
             throw TranscriptionError.modelUnavailable(
@@ -83,6 +100,9 @@ final class R2T2ModelInstaller: R2T2ModelInstalling {
             )
         }
 
+        try await Task.detached(priority: .utility) {
+            try integrity.verify(at: downloadedURL)
+        }.value
         do {
             try FileManager.default.moveItem(at: downloadedURL, to: destination)
         } catch {

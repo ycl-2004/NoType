@@ -15,6 +15,12 @@ extension AudioRecording {
     func recordingLevel(meteringEnabled: Bool) async -> Double { 0 }
 }
 
+protocol StreamingAudioCapturing: Sendable {
+    func start() throws
+    func stop() throws -> TimeInterval?
+    var currentLevel: Double { get }
+}
+
 // Recording and metering share one executor so stopping cannot race a meter read.
 actor AudioRecorder: StreamingAudioRecording {
     /// The process-wide temporary directory is shared with every other app, so recordings live in
@@ -23,9 +29,21 @@ actor AudioRecorder: StreamingAudioRecording {
         .appendingPathComponent("NoType", isDirectory: true)
 
     private var audioRecorder: AVAudioRecorder?
-    private var streamingCapture: StreamingAudioCapture?
+    private let recordingDirectory: URL
+    private let makeStreamingCapture: @Sendable (URL, @escaping @Sendable ([Float]) -> Void) throws -> any StreamingAudioCapturing
+    private var streamingCapture: (any StreamingAudioCapturing)?
     private var currentClipURL: URL?
     private var isRecording = false
+
+    init(
+        recordingDirectory: URL = AudioRecorder.clipDirectory,
+        makeStreamingCapture: @escaping @Sendable (URL, @escaping @Sendable ([Float]) -> Void) throws -> any StreamingAudioCapturing = {
+            try StreamingAudioCapture(outputURL: $0, onAudioChunk: $1)
+        }
+    ) {
+        self.recordingDirectory = recordingDirectory
+        self.makeStreamingCapture = makeStreamingCapture
+    }
 
     func recordingLevel(meteringEnabled: Bool) -> Double {
         if let streamingCapture {
@@ -75,10 +93,10 @@ actor AudioRecorder: StreamingAudioRecording {
         }
 
         try FileManager.default.createDirectory(
-            at: Self.clipDirectory,
+            at: recordingDirectory,
             withIntermediateDirectories: true
         )
-        let tempFileURL = Self.clipDirectory
+        let tempFileURL = recordingDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("wav")
 
@@ -114,18 +132,15 @@ actor AudioRecorder: StreamingAudioRecording {
         }
 
         try FileManager.default.createDirectory(
-            at: Self.clipDirectory,
+            at: recordingDirectory,
             withIntermediateDirectories: true
         )
-        let tempFileURL = Self.clipDirectory
+        let tempFileURL = recordingDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("wav")
 
         do {
-            let capture = try StreamingAudioCapture(
-                outputURL: tempFileURL,
-                onAudioChunk: onAudioChunk
-            )
+            let capture = try makeStreamingCapture(tempFileURL, onAudioChunk)
             try capture.start()
             streamingCapture = capture
             currentClipURL = tempFileURL
@@ -145,7 +160,17 @@ actor AudioRecorder: StreamingAudioRecording {
 
         let duration: TimeInterval?
         if let streamingCapture {
-            duration = streamingCapture.stop()
+            do {
+                duration = try streamingCapture.stop()
+            } catch {
+                self.streamingCapture = nil
+                self.currentClipURL = nil
+                audioRecorder = nil
+                isRecording = false
+                // stopRecording throws before the coordinator can receive and delete a clip.
+                try? FileManager.default.removeItem(at: currentClipURL)
+                throw error
+            }
             self.streamingCapture = nil
         } else {
             // currentTime resets once the recorder stops, so read it while it is still running.
@@ -169,7 +194,7 @@ actor AudioRecorder: StreamingAudioRecording {
 /// The existing AVAudioRecorder path remains in place for the offline engines. This tee writes the
 /// same 16 kHz mono WAV shape while forwarding float PCM chunks to R2T2, so a streaming session can
 /// still be deleted and diagnosed through the same RecordedAudioClip lifecycle.
-private final class StreamingAudioCapture: @unchecked Sendable {
+private final class StreamingAudioCapture: StreamingAudioCapturing, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let inputNode: AVAudioInputNode
     private let outputFile: AVAudioFile
@@ -222,22 +247,23 @@ private final class StreamingAudioCapture: @unchecked Sendable {
         }
     }
 
-    func stop() -> TimeInterval? {
+    func stop() throws -> TimeInterval? {
         lock.lock()
         guard !stopped else {
             let duration = durationLocked
+            let error = writeError
             lock.unlock()
+            if let error { throw AudioSessionError.captureFailed(error.localizedDescription) }
             return duration
         }
         stopped = true
         let duration = durationLocked
+        let error = writeError
         lock.unlock()
 
         engine.stop()
         inputNode.removeTap(onBus: 0)
-        if let writeError {
-            AppLogger.log("AudioRecorder.streaming: audio write failed: \(writeError.localizedDescription)")
-        }
+        if let error { throw AudioSessionError.captureFailed(error.localizedDescription) }
         return duration
     }
 
@@ -278,10 +304,14 @@ private final class StreamingAudioCapture: @unchecked Sendable {
             return buffer
         }
 
-        guard status != .error,
-              conversionError == nil,
-              converted.frameLength > 0,
-              let channelData = converted.floatChannelData else {
+        guard status != .error, conversionError == nil else {
+            writeError = conversionError ?? AudioSessionError.invalidInputFormat
+            lock.unlock()
+            return
+        }
+        // A converter may buffer input without producing frames yet; this is not a failure.
+        guard converted.frameLength > 0 else { lock.unlock(); return }
+        guard let channelData = converted.floatChannelData else {
             writeError = conversionError ?? AudioSessionError.invalidInputFormat
             lock.unlock()
             return
@@ -302,9 +332,9 @@ private final class StreamingAudioCapture: @unchecked Sendable {
         frameCount += AVAudioFramePosition(converted.frameLength)
         let meanSquare = samples.reduce(Float.zero) { $0 + ($1 * $1) } / Float(samples.count)
         latestLevel = AudioRecorder.normalizedLevel(decibels: 20 * log10(max(meanSquare.squareRoot(), 0.00001)))
-        lock.unlock()
-
+        // Publish under the same lock as stop(): once stop returns, every accepted chunk is queued.
         onAudioChunk(samples)
+        lock.unlock()
     }
 
     private var durationLocked: TimeInterval? {

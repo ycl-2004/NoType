@@ -4,8 +4,7 @@ import Foundation
 protocol R2T2Runtime: Sendable {
     func transcribe(
         samples: [Float],
-        language: DictationRecognitionLanguage,
-        isFinal: Bool
+        language: DictationRecognitionLanguage
     ) async throws -> String
 }
 
@@ -13,7 +12,7 @@ protocol R2T2Runtime: Sendable {
 ///
 /// llama.cpp currently gives NoType the Q4_K_M text model plus the Q8_0 audio projector, but does
 /// not expose the R2T2/vLLM streaming-state API. While that native state API is pending, the engine
-/// runs cumulative prefix decodes at a 320 ms cadence and emits only an append-only stable prefix.
+/// decodes bounded segments and reuses completed segments; only the current tail is previewed.
 /// This keeps the product contract correct — no live insertion and one final output pipeline — and
 /// leaves the runtime behind a small protocol so true stateful decoding can replace it later.
 @MainActor
@@ -29,7 +28,7 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
     private let makeRuntime: @Sendable (URL, URL) throws -> any R2T2Runtime
     private var runtime: (any R2T2Runtime)?
     private var loadingTask: Task<any R2T2Runtime, Error>?
-    private var activeSession: R2T2StreamSession?
+    private var activeSession: R2T2AudioStream?
     private let appState: AppState
 
     var canStream: Bool { true }
@@ -57,7 +56,7 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
             return TranscriptResult(text: "", rawText: "")
         }
 
-        let rawText = try await runtime.transcribe(samples: samples, language: language, isFinal: true)
+        let rawText = try await R2T2SegmentDecoder.transcribe(samples, runtime: runtime, language: language)
         return Self.makeTranscriptResult(
             rawText,
             language: language,
@@ -74,50 +73,42 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
         }
 
         let runtime = try await loadRuntime()
+        let sessionID = UUID()
         let session = R2T2StreamSession(
             runtime: runtime,
             language: language,
             chineseScriptPreference: chineseScriptPreference,
-            chunkSamples: Self.chunkSamples,
-            normalize: Self.normalizeRawText,
-            onStableTranscript: { [weak self] text in
-                guard let self else { return }
+            previewsEnabled: appState.showsVoiceOverlay && appState.showsLiveTranscript,
+            onPreview: { [weak self] text in
                 Task { @MainActor [weak self] in
-                    self?.liveTranscriptDidChange(text)
+                    guard let self, self.activeSession?.id == sessionID else { return }
+                    self.liveTranscriptDidChange(text)
                 }
             }
         )
-        activeSession = session
-
-        return { samples in
-            Task {
-                await session.append(samples)
-            }
-        }
+        let stream = R2T2AudioStream(id: sessionID, session: session)
+        activeSession = stream
+        return { samples in stream.append(samples) }
     }
 
     func finishStreaming() async throws -> TranscriptResult {
-        guard let session = activeSession else {
+        guard let stream = activeSession else {
             throw TranscriptionError.failed("R2T2 streaming session is missing")
         }
-        activeSession = nil
-
-        let rawText = try await session.finish()
-        let language = session.language
-        let preference = session.chineseScriptPreference
+        defer { activeSession = nil }
+        let rawText = try await stream.finish()
         let result = Self.makeTranscriptResult(
             rawText,
-            language: language,
-            chineseScriptPreference: preference
+            language: stream.session.language,
+            chineseScriptPreference: stream.session.chineseScriptPreference
         )
         liveTranscriptDidChange(result.text)
         return result
     }
 
     func cancelStreaming() {
-        guard let activeSession else { return }
-        self.activeSession = nil
-        Task { await activeSession.cancel() }
+        activeSession?.cancel()
+        activeSession = nil
     }
 
     func prewarm() async {
@@ -149,47 +140,31 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
         }
 
         onModelReadinessChange?(.preparing)
-        if R2T2Paths.modelFolderExists == false {
-            do {
-                guard try await modelInstaller.installIfNeeded(progress: { [weak self] message in
-                    self?.onModelReadinessChange?(.preparing)
-                    AppLogger.log("R2T2: \(message)")
-                }) != nil else {
-                    let message = "The R2T2 model is not installed. Retry model preparation to download it."
-                    onModelReadinessChange?(.failed(message))
-                    throw TranscriptionError.modelUnavailable(message)
-                }
-            } catch let error as TranscriptionError {
-                onModelReadinessChange?(.failed(error.localizedDescription))
-                throw error
-            } catch {
-                let message = "Could not download the R2T2 model: \(error.localizedDescription)"
-                onModelReadinessChange?(.failed(message))
-                throw TranscriptionError.modelUnavailable(message)
-            }
-        }
-
-        if let validationError = R2T2Paths.validationError() {
-            onModelReadinessChange?(.failed(validationError))
-            throw TranscriptionError.modelUnavailable(validationError)
-        }
-
         let makeRuntime = self.makeRuntime
-        let task = Task.detached(priority: .userInitiated) {
-            try makeRuntime(R2T2Paths.modelURL, R2T2Paths.projectorURL)
+        // Deduplicate the entire preparation, including downloads and integrity verification.
+        let task = Task { @MainActor [modelInstaller] in
+            guard try await modelInstaller.installIfNeeded(progress: { message in
+                AppLogger.log("R2T2: \(message)")
+            }) != nil else {
+                throw TranscriptionError.modelUnavailable("R2T2 is not installed. Retry model preparation.")
+            }
+            if let error = R2T2Paths.validationError() {
+                throw TranscriptionError.modelUnavailable(error)
+            }
+            return try await Task.detached(priority: .userInitiated) {
+                try makeRuntime(R2T2Paths.modelURL, R2T2Paths.projectorURL)
+            }.value
         }
         loadingTask = task
         defer { loadingTask = nil }
-
         do {
             let loaded = try await task.value
             runtime = loaded
             onModelReadinessChange?(.ready)
-            AppLogger.log("R2T2: Q4_K_M model and Q8_0 audio projector loaded with Metal")
+            AppLogger.log("R2T2: verified model and projector loaded with Metal")
             return loaded
         } catch {
-            let message = Self.readinessFailureMessage(for: error)
-            onModelReadinessChange?(.failed(message))
+            onModelReadinessChange?(.failed(Self.readinessFailureMessage(for: error)))
             throw error
         }
     }
@@ -253,136 +228,6 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
             return message
         }
         return error.localizedDescription
-    }
-}
-
-/// The stream actor owns ordering and coalesces work if a decode is slower than the microphone.
-private actor R2T2StreamSession {
-    let language: DictationRecognitionLanguage
-    let chineseScriptPreference: ChineseScriptPreference
-
-    private let runtime: any R2T2Runtime
-    private let chunkSamples: Int
-    private let normalize: @Sendable (String) -> String
-    private let onStableTranscript: @Sendable (String) -> Void
-    private var samples: [Float] = []
-    private var stableText = ""
-    private var lastSubmittedSampleCount = 0
-    private var processingTask: Task<Void, Never>?
-    private var isFinishing = false
-    private var isCancelled = false
-    private var partialError: Error?
-
-    init(
-        runtime: any R2T2Runtime,
-        language: DictationRecognitionLanguage,
-        chineseScriptPreference: ChineseScriptPreference,
-        chunkSamples: Int,
-        normalize: @escaping @Sendable (String) -> String,
-        onStableTranscript: @escaping @Sendable (String) -> Void
-    ) {
-        self.runtime = runtime
-        self.language = language
-        self.chineseScriptPreference = chineseScriptPreference
-        self.chunkSamples = chunkSamples
-        self.normalize = normalize
-        self.onStableTranscript = onStableTranscript
-    }
-
-    func append(_ newSamples: [Float]) {
-        guard !isCancelled, !newSamples.isEmpty else { return }
-        samples.append(contentsOf: newSamples)
-        schedulePartialIfNeeded()
-    }
-
-    func finish() async throws -> String {
-        guard !isCancelled else {
-            throw TranscriptionError.failed("R2T2 streaming session was cancelled")
-        }
-        isFinishing = true
-        while let processingTask {
-            await processingTask.value
-            self.processingTask = nil
-        }
-        if let partialError {
-            AppLogger.log("R2T2: partial decode failed before finalization: \(partialError)")
-        }
-        guard samples.isEmpty == false else { return "" }
-        let final = try await runtime.transcribe(
-            samples: samples,
-            language: language,
-            isFinal: true
-        )
-        let normalized = normalize(final)
-        if normalized.isEmpty == false {
-            stableText = normalized
-            onStableTranscript(stableText)
-        }
-        return final
-    }
-
-    func cancel() {
-        isCancelled = true
-        processingTask?.cancel()
-        processingTask = nil
-        samples.removeAll(keepingCapacity: false)
-    }
-
-    private func schedulePartialIfNeeded() {
-        guard !isFinishing,
-              !isCancelled,
-              partialError == nil,
-              processingTask == nil,
-              samples.count - lastSubmittedSampleCount >= chunkSamples else {
-            return
-        }
-
-        let snapshot = samples
-        lastSubmittedSampleCount = snapshot.count
-        processingTask = Task { [runtime, language, normalize, weak self] in
-            do {
-                let raw = try await runtime.transcribe(
-                    samples: snapshot,
-                    language: language,
-                    isFinal: false
-                )
-                await self?.partialFinished(normalize(raw))
-            } catch {
-                await self?.partialFailed(error)
-            }
-        }
-    }
-
-    private func partialFinished(_ candidate: String) {
-        processingTask = nil
-        guard !isCancelled, !isFinishing else { return }
-        guard candidate.isEmpty == false else {
-            schedulePartialIfNeeded()
-            return
-        }
-
-        stableText = Self.appendOnlyStablePrefix(previous: stableText, candidate: candidate)
-        onStableTranscript(stableText)
-        schedulePartialIfNeeded()
-    }
-
-    private func partialFailed(_ error: Error) {
-        processingTask = nil
-        partialError = error
-        AppLogger.log("R2T2: partial decode failed: \(error.localizedDescription)")
-    }
-
-    private static func appendOnlyStablePrefix(previous: String, candidate: String) -> String {
-        guard previous.isEmpty == false else { return candidate }
-        guard candidate.hasPrefix(previous) else {
-            let previousScalars = Array(previous)
-            let candidateScalars = Array(candidate)
-            let commonCount = zip(previousScalars, candidateScalars)
-                .prefix { $0 == $1 }
-                .count
-            return String(previousScalars.prefix(commonCount))
-        }
-        return candidate
     }
 }
 
@@ -458,8 +303,7 @@ private final class R2T2LlamaRuntime: R2T2Runtime, @unchecked Sendable {
 
     func transcribe(
         samples: [Float],
-        language: DictationRecognitionLanguage,
-        isFinal _: Bool
+        language: DictationRecognitionLanguage
     ) async throws -> String {
         try transcribeSynchronously(samples: samples, language: language)
     }
@@ -522,6 +366,12 @@ private final class R2T2LlamaRuntime: R2T2Runtime, @unchecked Sendable {
             throw TranscriptionError.failed("llama.cpp could not tokenize R2T2 audio (error \(tokenizeResult)).")
         }
 
+        // b11102 mtmd-helper.h exposes the prompt token count before allocating KV positions.
+        let outputBudget = 1_024
+        guard mtmd_helper_get_n_tokens(chunks) + outputBudget < Int(llama_n_ctx(context)) else {
+            throw R2T2DecodeError.limitReached
+        }
+        try Task.checkCancellation()
         var nPast: Int32 = 0
         let evalResult = mtmd_helper_eval_chunks(
             projector,
@@ -537,12 +387,15 @@ private final class R2T2LlamaRuntime: R2T2Runtime, @unchecked Sendable {
             throw TranscriptionError.failed("llama.cpp could not evaluate R2T2 audio (error \(evalResult)).")
         }
 
-        var pieces = ""
-        for _ in 0..<512 {
+        // Decode bytes only after the full sequence: a UTF-8 character can span tokens.
+        var tokens: [llama_token] = []
+        for _ in 0..<outputBudget {
+            try Task.checkCancellation()
             let token = llama_sampler_sample(sampler, context, -1)
-            if llama_vocab_is_eog(vocabulary, token) { break }
-            pieces += tokenPiece(token)
-
+            if llama_vocab_is_eog(vocabulary, token) {
+                return try detokenize(tokens)
+            }
+            tokens.append(token)
             var mutableToken = token
             let batch = withUnsafeMutablePointer(to: &mutableToken) {
                 llama_batch_get_one($0, 1)
@@ -551,15 +404,28 @@ private final class R2T2LlamaRuntime: R2T2Runtime, @unchecked Sendable {
                 throw TranscriptionError.failed("llama.cpp failed while decoding R2T2 text.")
             }
         }
-        return pieces
+        // Never return an apparently successful but truncated transcript.
+        throw R2T2DecodeError.limitReached
     }
 
-    private func tokenPiece(_ token: Int32) -> String {
-        var buffer = [Int8](repeating: 0, count: 256)
-        let count = buffer.withUnsafeMutableBufferPointer { buffer in
-            llama_token_to_piece(vocabulary, token, buffer.baseAddress, Int32(buffer.count), 0, false)
+    private func detokenize(_ tokens: [llama_token]) throws -> String {
+        guard !tokens.isEmpty else { return "" }
+        // llama_detokenize returns the negative required byte count for an undersized buffer.
+        // https://github.com/ggml-org/llama.cpp/blob/b11102/include/llama.h
+        let required = tokens.withUnsafeBufferPointer {
+            llama_detokenize(vocabulary, $0.baseAddress, Int32($0.count), nil, 0, true, false)
         }
-        guard count > 0 else { return "" }
-        return String(decoding: buffer.prefix(Int(count)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        guard required < 0 else { return "" }
+        var bytes = [CChar](repeating: 0, count: Int(-required))
+        let count = tokens.withUnsafeBufferPointer { tokens in
+            bytes.withUnsafeMutableBufferPointer { buffer in
+                llama_detokenize(vocabulary, tokens.baseAddress, Int32(tokens.count),
+                                 buffer.baseAddress, Int32(buffer.count), true, false)
+            }
+        }
+        guard count >= 0 else {
+            throw TranscriptionError.failed("R2T2 could not decode the transcript bytes.")
+        }
+        return String(decoding: bytes.prefix(Int(count)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 }

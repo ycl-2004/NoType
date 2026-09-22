@@ -66,6 +66,7 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
     /// Warms only the engine the current settings would actually use. Warming both would load a
     /// large local model for users who never reach it.
     func prewarm() async {
+        guard activeStreamingEngine == nil else { return }
         let choice = appState.selectedTranscriptionEngine.resolvedEngine(
             for: appState.selectedRecognitionLanguage
         )
@@ -104,6 +105,14 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
     }
 
     private func engine(for choice: TranscriptionEngineChoice) -> TranscriptionEngine {
+        // Keep the current engine hot, but do not accumulate every model used in this process.
+        // An in-flight stream retains its engine until finalization/cancellation.
+        if activeStreamingEngine == nil {
+            if choice != .appleSpeech { appleEngine = nil }
+            if choice != .qwen3ASR { qwen3ASREngine = nil }
+            if choice != .senseVoice { senseVoiceEngine = nil }
+            if choice != .r2t2 { r2t2Engine = nil }
+        }
         switch choice {
         case .appleSpeech:
             if let appleEngine { return appleEngine }
