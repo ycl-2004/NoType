@@ -114,6 +114,7 @@ open /Applications/NoType.app
 - 中文優先 and English honour the selected engine.
 - On macOS 15 macOS Speech is unavailable and every mode uses R2T2.
 - R2T2 is loaded only when a dictation needs it, so staying on macOS Speech for single-language modes avoids its startup cost.
+- **Edit Hotwords…** under the engine menu opens a plain text file (`~/Library/Application Support/NoType/hotwords.txt`) with one term per line. R2T2 receives the list at the start of each dictation, which helps with distinctive names and technical terms. Words that sound like ordinary words may still be misheard, and common words in the list can be inserted where you did not say them.
 - **Manage Downloaded Models** appears under the engine menu. It removes only NoType's R2T2 download folder after confirmation; macOS Speech assets are left to macOS.
 
 **Recognition**
@@ -417,7 +418,7 @@ before treating a build as a public, notarized release.
 - The current public build is ad-hoc signed and not notarized.
 - There is no in-app updater; new versions are installed manually.
 - The R2T2 model is downloaded on first use rather than bundled, so a new install needs a network connection before its first R2T2 dictation.
-- R2T2 has no custom-vocabulary list yet. The model supports context and hotword hints, but NoType does not pass any, so names and technical terms can be misheard.
+- Hotwords help R2T2 with distinctive names and terms but not with terms that sound like ordinary words, such as "parser" heard as "parse".
 - Recordings longer than 24 seconds are decoded in segments. Punctuation at a cut is approximated: a segment's closing `。` becomes `，`.
 - The macOS Speech engine requires macOS 26 or later and cannot detect the spoken language, so Auto uses R2T2 when macOS Speech is selected.
 - The macOS Speech engine has no custom-vocabulary list yet, so proper nouns spoken inside another language can be transliterated rather than spelled.
@@ -438,6 +439,7 @@ before treating a build as a public, notarized release.
 - [ADR-010: R2T2 streaming engine](docs/decisions/010-r2t2-streaming-engine.md) — internal streaming, the 320 ms first cadence, and strict Hugging Face model storage.
 - [ADR-011: R2T2 resources and reliability](docs/decisions/011-r2t2-resource-and-reliability.md) — bounded segments, preview back-off, pinned and verified model files.
 - [ADR-012: R2T2 is the only local engine](docs/decisions/012-r2t2-only-local-engine.md) — why Qwen3-ASR and SenseVoice were removed and how saved preferences migrate.
+- [ADR-013: R2T2 prompt template and hotword list](docs/decisions/013-r2t2-prompt-and-hotwords.md) — the trained prompt layout, the hotword file, and the measurements behind both.
 
 ## Third-party terms
 

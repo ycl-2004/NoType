@@ -59,12 +59,13 @@ behaviours needs to be thought through rather than flipped.
 **Direction.** Treat a transcript that is *entirely* a known hallucination as "no speech detected"
 and report it as such, instead of inserting the phrase.
 
-### 5. No custom vocabulary
+### 5. Names and technical terms are still misheard
 
 Names and technical terms are often misheard (「千问」, "LLM", "HTML" in real dictations on
-2026-11-26). The R2T2 model card documents context and hotword hints, passed as system-turn text;
-NoType passes none. NoType also writes its instruction ("Transcribe audio to text.") into the user
-turn, which R2T2's chat template does not render, so the model was never trained with text there.
+2026-11-26). The prompt now follows R2T2's chat template and carries a user hotword list
+(ADR-013). Under Auto the list fixed distinctive terms such as Ghostty and DMA but not NoType
+(no type) or parser (parse). Under 中文优先 the same list also fixed Claude Code and NoType and kept
+English capitalisation; parser stayed wrong in both modes.
 
 **A higher-precision model is not the fix (measured 2026-11-26).** Five passages read aloud by the
 user (8–23 s, Voice Memos, converted to 16 kHz mono), decoded offline through NoType's segment
@@ -90,8 +91,9 @@ Reference texts, kept so the same recordings can judge a vocabulary change:
 
 The recordings are the user's and are not in the repository.
 
-**Direction.** Move the instruction out of the user turn and add a user vocabulary as system-turn
-context, then compare against real recordings, such as the five above, before keeping either change.
+**Direction.** Terms that hotwords cannot fix would need a text replacement list after
+recognition (for example "no type" → "NoType"), which risks changing words the speaker meant.
+Measure any change against the five recordings above.
 
 ### 6. No LLM post-processing
 

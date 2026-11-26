@@ -15,6 +15,11 @@ All notable user-facing changes to NoType are recorded here.
   recording and ends the session without inserting text or touching the clipboard. NoType consumes
   that press, so it does not also interrupt the focused app (for example an agent running in a
   terminal). Esc with Command, Option, Control or Shift passes through. The overlay shows `已取消`.
+- Added **hotwords** for R2T2. **Engine → Edit Hotwords…** opens a plain text file with one term
+  per line; names and technical terms in it are passed to the model at the start of each dictation.
+  The R2T2 prompt now also follows the model's own chat template. On five read passages this fixed
+  "Ghostty" and "DMA", but not terms that sound like ordinary words. See
+  [ADR-013](docs/decisions/013-r2t2-prompt-and-hotwords.md).
 - Added a strict shared Hugging Face model-store guard. R2T2 downloads validate their configured,
   staging, and resolved filesystem paths before storing model files.
 

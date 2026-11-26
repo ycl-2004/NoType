@@ -64,5 +64,7 @@ Unreleased：R2T2 成为唯一本地引擎、Esc 取消、浮窗简化、分段�
 已实测、不再重做的两件事：苹果系统模型做语义清洗不够用（known-issues #6）；Q8 不比 Q4 准，
 错误集中在专有名词（known-issues #5）。
 
-下一步是热词：R2T2 的模型卡说明热词和上下文要放在 system 段；`R2T2LlamaRuntime` 目前把指令
-写在 user 段，而 R2T2 的聊天模板不渲染 user 段文字。用 known-issues #5 里的 5 段录音做前后对比。
+R2T2 提示词按模型自己的聊天模板构造，热词来自 `~/Library/Application Support/NoType/hotwords.txt`
+（ADR-013）。实测「中文优先」模式下热词效果明显好于 Auto，专有名词和大小写基本都对；parser
+在两种模式下都还会错（known-issues #5）。改提示词或热词格式时，用 known-issues #5 里的 5 段
+录音做前后对比。

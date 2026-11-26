@@ -99,6 +99,7 @@ open /Applications/NoType.app
 - **中文優先** 和 English 會遵循選定的引擎。
 - 在 macOS 15 上，macOS Speech 選項不可用，所有模式都使用 R2T2。
 - 只有真正需要 R2T2 的聽寫才會載入模型；單一語言模式持續使用 macOS Speech 時，不會承擔它的啟動成本。
+- 引擎選單下的 **Edit Hotwords…** 會開啟一個純文字檔（`~/Library/Application Support/NoType/hotwords.txt`），一行一個詞。每次聽寫開始時 R2T2 會讀取這份清單，對獨特的人名與技術詞彙有幫助；發音接近一般詞彙的詞仍可能聽錯，清單裡的常用詞也可能在你沒說時被插入。
 - **Manage Downloaded Models** 位於引擎選單下。確認後只會移除 NoType 自己下載的 R2T2 資料夾；macOS Speech 資產交由 macOS 管理。
 
 **辨識**
@@ -333,7 +334,7 @@ CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 - 目前公開建構是 ad-hoc 簽名，尚未經 Apple 公證。
 - App 內沒有自動更新器；新版本需要手動安裝。
 - R2T2 模型在第一次使用時下載，而不是打包進 App；全新安裝在第一次 R2T2 聽寫前需要網路連線。
-- R2T2 目前沒有自訂詞彙表。模型支援上下文與熱詞提示，但 NoType 尚未傳入，所以人名與技術詞彙可能聽錯。
+- 熱詞對獨特的人名與技術詞彙有幫助，但對發音接近一般詞彙的詞沒有效果，例如 parser 仍會聽成 parse。
 - 超過 24 秒的錄音會分段解碼，切點處的標點是近似的：段尾的 `。` 會改成 `，`。
 - macOS Speech 引擎需要 macOS 26 或更高版本，且無法判斷說話語言；選擇 macOS Speech 時，Auto 會使用 R2T2。
 - macOS Speech 目前沒有自訂詞彙表；在另一種語言中說出專有名詞時，可能會被音譯，而不是按預期拼寫。
@@ -354,6 +355,7 @@ CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 - [ADR-010：R2T2 串流引擎](docs/decisions/010-r2t2-streaming-engine.md) — 內部串流、首次 320 毫秒的節奏，以及嚴格的 Hugging Face 模型儲存。
 - [ADR-011：R2T2 資源與可靠性](docs/decisions/011-r2t2-resource-and-reliability.md) — 有界分段、預覽退避、固定版本並校驗的模型檔。
 - [ADR-012：R2T2 是唯一本機引擎](docs/decisions/012-r2t2-only-local-engine.md) — 移除 Qwen3-ASR 與 SenseVoice 的原因，以及舊偏好如何遷移。
+- [ADR-013：R2T2 提示詞格式與熱詞清單](docs/decisions/013-r2t2-prompt-and-hotwords.md) — 模型訓練時的提示詞格式、熱詞檔，以及背後的量測。
 
 ## 第三方條款
 
