@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.4.0-arm64.zip"><strong>⬇ 下載 macOS 版</strong></a>
+  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.5.0-arm64.zip"><strong>⬇ 下載 macOS 版</strong></a>
   ·
   <a href="https://github.com/ycl-2004/NoType/releases">版本發佈</a>
   ·
@@ -47,7 +47,7 @@ NoType 目前提供兩個裝置端引擎，會在每次聽寫時選擇其中一�
 
 ## 快速開始
 
-1. **[下載 `NoType-0.4.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.4.0-arm64.zip)** 並解壓縮。套件不內含語音模型，App 會在第一次使用時下載。
+1. **[下載 `NoType-0.5.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.5.0-arm64.zip)** 並解壓縮。套件不內含語音模型，App 會在第一次使用時下載。
 2. 將 `NoType.app` 移到 `/Applications`。第一次啟動時，請按住 Control 點按 App，選擇**開啟**——目前版本是 ad-hoc 簽名，尚未經 Apple 公證。
 3. 授予錄音所需的**麥克風**權限，以及全域快捷鍵和直接插入文字所需的**輔助使用**權限。macOS 26 或更高版本還要授予**語音辨識**權限，NoType 才能使用系統的裝置端辨識器。
 
@@ -166,14 +166,14 @@ open /Applications/NoType.app
 
 ## 目前版本
 
-NoType `0.4.0` 已在 [`v0.4.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.4.0) 發佈，提供 Apple Silicon 封存檔。
+NoType `0.5.0` 已在 [`v0.5.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.5.0) 發佈，提供 Apple Silicon 封存檔。
 
 | 產物 | 用途 |
 | --- | --- |
-| `NoType-0.4.0-arm64.zip` | 可直接執行的 App；語音模型會在第一次使用時下載 |
-| `NoType-0.4.0-arm64.zip.sha256` | 用於驗證下載內容的 SHA-256 校驗檔 |
+| `NoType-0.5.0-arm64.zip` | 可直接執行的 App；語音模型會在第一次使用時下載 |
+| `NoType-0.5.0-arm64.zip.sha256` | 用於驗證下載內容的 SHA-256 校驗檔 |
 
-語音模型不會提交到此儲存庫，也不會打包進封存檔。0.4.0 早於上面描述的引擎：它的本機引擎是從 sherpa-onnx GitHub 發佈下載的 Qwen3-ASR 0.6B INT8 與 SenseVoice Small，沒有 R2T2。以 R2T2 作為唯一本機引擎的版本尚未發佈，請見 [變更記錄](CHANGELOG.md)。
+語音模型不會提交到此儲存庫，也不會打包進封存檔。NoType 會在第一次啟動時，從 Hugging Face 上固定版本下載 R2T2 模型。從 0.4.0 升級時，Qwen3-ASR 與 SenseVoice 會由 R2T2 取代，請見 [變更記錄](CHANGELOG.md) 與 [發佈說明](docs/releases/0.5.0.md)。
 
 ## 常見問題
 
@@ -299,8 +299,8 @@ swift test
 
 ```text
 dist/NoType.app
-dist/NoType-0.4.0-arm64.zip
-dist/NoType-0.4.0-arm64.zip.sha256
+dist/NoType-0.5.0-arm64.zip
+dist/NoType-0.5.0-arm64.zip.sha256
 ```
 
 預設簽名是 ad-hoc。若要使用已安裝的 Developer ID 身分：

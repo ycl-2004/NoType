@@ -2,7 +2,13 @@
 
 All notable user-facing changes to NoType are recorded here.
 
-## [Unreleased]
+## [0.5.0] - 2026-11-26
+
+Release: [v0.5.0](https://github.com/ycl-2004/NoType/releases/tag/v0.5.0)
+
+Upgrading from 0.4.0: Qwen3-ASR and SenseVoice are gone, and a saved choice of either now loads
+R2T2, which downloads about 1.5 GB on first launch. Their old model folders under
+`~/Documents/huggingface/models/k2-fsa/` are not removed automatically.
 
 ### Added
 
@@ -63,6 +69,8 @@ All notable user-facing changes to NoType are recorded here.
   that preview is cancelled so the final decode starts immediately.
 - Debug logs are capped at 2 MiB and scanned hourly rather than on every event. SwiftPM and
   XCTest runs use separate diagnostic logs.
+- Release checksum files now list only the archive name, so `shasum -c` works next to the
+  download and no local path is published.
 - Added `scripts/clean_development.sh` to remove generated builds and old ZIPs while preserving
   the ready-to-use app and downloaded models. See [ADR-011](docs/decisions/011-r2t2-resource-and-reliability.md).
 
@@ -71,6 +79,14 @@ All notable user-facing changes to NoType are recorded here.
   the first release to the second press. Global shortcut listening also keeps a retained activity
   assertion so the accessory app and its recovery watchdog are less likely to be throttled in the
   background.
+
+### Verification
+
+- 185 tests passed across 30 suites.
+- Release app version `0.5.0` (`CFBundleVersion` 5) passed whole-bundle signature verification
+  (ad-hoc) and launches with `llama.framework` resolved through its `@executable_path` rpath.
+- Release ZIP passed archive integrity verification.
+- Release ZIP SHA-256: `9ad4886db4098457c8f0a178b0bc581e2db59eb4cd82816f3dd8b69db0b0b714`.
 
 ## [0.4.0] - 2026-09-11
 

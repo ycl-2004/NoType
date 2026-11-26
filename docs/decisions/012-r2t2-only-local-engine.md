@@ -38,8 +38,7 @@ so it can take all three roles. SenseVoice was only ever a comparison engine.
 - There is no second local engine to fall back to or compare against. A broken llama.cpp update
   or model file leaves macOS Speech single-language modes as the only working path.
 - A new install downloads about 1.46 GB at first launch instead of nothing on macOS 26.
-- The 0.4.0 release still ships Qwen3-ASR and SenseVoice; this change applies from the next
-  release.
+- The change shipped in 0.5.0; 0.4.0 still ships Qwen3-ASR and SenseVoice.
 - Model files left by the removed engines are not cleaned up automatically.
 - sherpa-onnx had also been supplying the rpath through which the executable found
   `llama.framework`. Without it the app aborted at launch ("Library not loaded"), so

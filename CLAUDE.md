@@ -53,9 +53,10 @@ Sources/Typeless/
 
 ## 当前状态
 
-已发布 0.4.0（本地引擎还是 Qwen3-ASR 和 SenseVoice）。`main` 上的未发布改动见
-`CHANGELOG.md` 的 Unreleased：R2T2 成为唯一本地引擎、热词、Esc 取消、浮窗简化、分段标点
-修复、R2T2 启动校验按文件身份缓存。`/Applications` 里装的是 `main` 当前代码的开发证书签名版。
+已发布 0.5.0（2026-11-26，`v0.5.0` 标签）：R2T2 成为唯一本地引擎、热词、Esc 取消、浮窗简化、
+分段标点修复、R2T2 启动校验按文件身份缓存，详见 `CHANGELOG.md`。公开发布包是 ad-hoc 签名（开发
+证书的签名会带出 YC 的邮箱，所以不用于公开包）；`/Applications` 里装的是同一份代码的开发证书
+签名版。
 
 日常使用的引擎是 R2T2：2026-11-26 一次 86 秒听写，松手后约 1 秒插入（日志秒级精度）。
 已实测、不再重做的两件事：苹果系统模型做语义清洗不够用（known-issues #6）；Q8 不比 Q4 准，
@@ -64,7 +65,7 @@ Sources/Typeless/
 R2T2 提示词按模型自己的聊天模板构造，热词来自 `~/Library/Application Support/NoType/hotwords.txt`
 （ADR-013）。实测「中文优先」模式下热词效果明显好于 Auto，专有名词和大小写基本都对；parser
 在两种模式下都还会错（known-issues #5）。改提示词或热词格式时，用 known-issues #5 里的 5 段
-录音做前后对比。
+录音做前后对比，录音在 `~/Documents/NoType/benchmark-recordings/`（YC 本人的声音，不进仓库）。
 
 识别后的文字替换表（错写法 → 正确写法）暂缓：YC 从 2026-11-26 起用「中文优先」+ 热词观察几天，
 攒到 3–5 个热词修不好、每次错法都一样的词再做。get、parse、全文这类本身是常用词的错写法不能

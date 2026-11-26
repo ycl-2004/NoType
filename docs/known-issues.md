@@ -89,7 +89,8 @@ Reference texts, kept so the same recordings can judge a vocabulary change:
 4. Can you check whether the API returns a 404 when the token expires, and if so, add a retry with exponential backoff.
 5. 我想把 NoType 的识别模型从 Q4 换成 Q8 试试看，因为社区有人测过，Q8 在远场的准确率比 Q4 高不少，而且速度差不多。不过 Q8 的文件大概一点八 GB，内存会多占零点七 GB 左右，所以我想先用几段固定的录音做对比，看看错字率到底差多少，再决定要不要换。如果差别不大，我们就继续用 Q4，省一点内存。
 
-The recordings are the user's and are not in the repository.
+The recordings are the maintainer's voice, so they are kept out of the repository, in
+`~/Documents/NoType/benchmark-recordings/` on the development Mac.
 
 **Direction.** Terms that hotwords cannot fix would need a text replacement list after
 recognition (for example "no type" → "NoType"), which risks changing words the speaker meant.

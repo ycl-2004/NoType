@@ -25,7 +25,9 @@ echo "Building NoType $VERSION release from the current checkout..."
 rm -f "$ARCHIVE_PATH" "$CHECKSUM_PATH"
 echo "Creating release archive at $ARCHIVE_PATH"
 ditto -c -k --norsrc --keepParent "$APP_DIR" "$ARCHIVE_PATH"
-shasum -a 256 "$ARCHIVE_PATH" | tee "$CHECKSUM_PATH"
+# Record only the file name, so the published checksum leaks no local path and `shasum -c` works
+# next to the downloaded archive.
+(cd "$DIST_DIR" && shasum -a 256 "$(basename "$ARCHIVE_PATH")") | tee "$CHECKSUM_PATH"
 
 echo "Release ready:"
 echo "  App:      $APP_DIR"

@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.4.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
+  <a href="https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.5.0-arm64.zip"><strong>⬇ Download for macOS</strong></a>
   ·
   <a href="https://github.com/ycl-2004/NoType/releases">Releases</a>
   ·
@@ -54,7 +54,7 @@ transcription API.
 
 ## Quick start
 
-1. **[Download `NoType-0.4.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.4.0-arm64.zip)** and unzip it. No speech model is bundled — the app downloads one on first use.
+1. **[Download `NoType-0.5.0-arm64.zip`](https://github.com/ycl-2004/NoType/releases/latest/download/NoType-0.5.0-arm64.zip)** and unzip it. No speech model is bundled — the app downloads one on first use.
 2. Move `NoType.app` to `/Applications`. On first launch, Control-click the app and choose **Open** — the current build is ad-hoc signed and not yet Apple-notarized.
 3. Allow **Microphone** access for recording and **Accessibility** access for global shortcuts and direct text insertion. On macOS 26 or later, also allow **Speech Recognition** so NoType can use the system's on-device recognizer.
 
@@ -182,20 +182,20 @@ The defaults are:
 
 ## Current release
 
-NoType `0.4.0` is available as an Apple Silicon archive from the
-[`v0.4.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.4.0)
+NoType `0.5.0` is available as an Apple Silicon archive from the
+[`v0.5.0`](https://github.com/ycl-2004/NoType/releases/tag/v0.5.0)
 release.
 
 | Artifact | Purpose |
 | --- | --- |
-| `NoType-0.4.0-arm64.zip` | Ready-to-run app; the speech model is downloaded on first use |
-| `NoType-0.4.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
+| `NoType-0.5.0-arm64.zip` | Ready-to-run app; the speech model is downloaded on first use |
+| `NoType-0.5.0-arm64.zip.sha256` | SHA-256 checksum for download verification |
 
 Speech models are not committed to this repository and are not bundled in the
-archive. 0.4.0 predates the engines described above: its local engines are
-Qwen3-ASR 0.6B INT8 and SenseVoice Small, downloaded from the sherpa-onnx GitHub
-releases, and it has no R2T2. R2T2 as the only local engine is unreleased; see
-the [changelog](CHANGELOG.md).
+archive. NoType downloads the R2T2 model from a pinned Hugging Face revision on
+first launch. Upgrading from 0.4.0 replaces its Qwen3-ASR and SenseVoice engines
+with R2T2; see the [changelog](CHANGELOG.md) and
+[release notes](docs/releases/0.5.0.md).
 
 ## FAQ
 
@@ -381,8 +381,8 @@ creates:
 
 ```text
 dist/NoType.app
-dist/NoType-0.4.0-arm64.zip
-dist/NoType-0.4.0-arm64.zip.sha256
+dist/NoType-0.5.0-arm64.zip
+dist/NoType-0.5.0-arm64.zip.sha256
 ```
 
 The default signature is ad-hoc. To use an installed Developer ID identity:
