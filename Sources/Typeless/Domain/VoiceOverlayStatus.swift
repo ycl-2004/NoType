@@ -1,7 +1,7 @@
 /// Presentation state is separate from dictation so feedback can outlive a completed session.
 enum VoiceOverlayStatus: CaseIterable, Equatable {
     case hidden, recording, transcribing, inserting, copying
-    case inserted, copied, noSpeech, recordingFailed, transcriptionFailed, insertionFailed, copyFailed
+    case inserted, copied, cancelled, noSpeech, recordingFailed, transcriptionFailed, insertionFailed, copyFailed
     case permissionRequired
 
     var text: String {
@@ -13,6 +13,7 @@ enum VoiceOverlayStatus: CaseIterable, Equatable {
         case .copying: "复制中…"
         case .inserted: "已插入"
         case .copied: "已复制"
+        case .cancelled: "已取消"
         case .noSpeech: "未听清"
         case .recordingFailed: "录音失败"
         case .transcriptionFailed: "转写失败"

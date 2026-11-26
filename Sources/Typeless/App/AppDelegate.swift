@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var registeredDictationShortcuts: [ShortcutBinding]?
     private var registeredRecognitionModeShortcuts: [ShortcutBinding]?
     private var shortcutListeningActivity: NSObjectProtocol?
+    private var escapeKeyInterceptor: EscapeKeyInterceptor?
     private let microphonePermissionManager = MicrophonePermissionManager()
     private let accessibilityPermissionManager = AccessibilityPermissionManager()
     private let permissionSettingsOpener = SystemSettingsOpener()
@@ -35,9 +36,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             permissionSettingsOpener: permissionSettingsOpener
         )
         let existingOnChange = appState.onChange
+        escapeKeyInterceptor = EscapeKeyInterceptor { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.coordinator.cancelDictation()
+            }
+        }
         appState.onChange = { [weak self] in
             existingOnChange?()
             self?.refreshShortcutRegistration()
+            self?.refreshEscapeInterception()
         }
         refreshShortcutRegistration()
         NSApp.setActivationPolicy(.accessory)
@@ -50,12 +58,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        escapeKeyInterceptor?.stop()
         voiceOverlayController?.close()
         dictationShortcutMonitor?.stop()
         recognitionModeShortcutMonitor?.stop()
         if let shortcutListeningActivity {
             ProcessInfo.processInfo.endActivity(shortcutListeningActivity)
             self.shortcutListeningActivity = nil
+        }
+    }
+
+    /// Escape cancels only an active session; at any other time it belongs to the focused app.
+    private func refreshEscapeInterception() {
+        guard let escapeKeyInterceptor else { return }
+        switch appState.dictationState {
+        case .recording, .transcribing:
+            guard escapeKeyInterceptor.isActive == false else { return }
+            if escapeKeyInterceptor.start() == false {
+                AppLogger.log("Escape cancel unavailable: macOS refused the key event tap (Accessibility permission?)")
+            }
+        case .idle, .inserting, .error:
+            escapeKeyInterceptor.stop()
         }
     }
 

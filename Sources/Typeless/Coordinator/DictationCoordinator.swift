@@ -51,6 +51,12 @@ final class DictationCoordinator {
     private var recordingTimeoutTask: Task<Void, Never>?
     private var audioLevelTask: Task<Void, Never>?
     private var activeStreamingEngine: StreamingTranscriptionEngine?
+    /// The transcription a stop is waiting on, so Escape can abandon it.
+    private var transcriptionTask: Task<TranscriptResult, Error>?
+    /// Set when Escape arrives while a stop is transcribing. The stop checks it once the
+    /// transcription returns, so a cancelled result is never inserted or copied, even from an
+    /// engine that finishes its decode instead of honoring task cancellation.
+    private var cancellationRequested = false
 
     /// `startDictation` awaits a microphone permission check, and the state stays `.idle` for that
     /// whole window. A second shortcut press during it used to start a second session: the first
@@ -139,6 +145,7 @@ final class DictationCoordinator {
     }
 
     private func startDictation() async {
+        cancellationRequested = false
         targetApplication = captureTargetApplication()
         targetInput = focusedTextInserter.captureTarget()
         appState.lastError = nil
@@ -209,6 +216,48 @@ final class DictationCoordinator {
             appState.setDebugMessage("Recorder failed: \(error.localizedDescription)")
             AppLogger.log("startDictation: recorder failed \(error.localizedDescription)")
         }
+    }
+
+    /// Abandons the current session: the recording is deleted, nothing is inserted, and the
+    /// clipboard is left as it was. Recording stops immediately; a transcription in progress is
+    /// cancelled and its result discarded when it returns.
+    func cancelDictation() async {
+        switch appState.dictationState {
+        case .recording:
+            guard isHandlingToggle == false else { return }
+            isHandlingToggle = true
+            defer { isHandlingToggle = false }
+            AppLogger.log("cancelDictation: cancelling recording")
+            cancelRecordingTimeout()
+            audioLevelTask?.cancel()
+            audioLevelTask = nil
+            activeStreamingEngine?.cancelStreaming()
+            activeStreamingEngine = nil
+            do {
+                try await audioRecorder.stopRecording().deleteFile()
+            } catch {
+                // The recorder deletes an incomplete file itself when stopping fails.
+                AppLogger.log("cancelDictation: recorder stop failed while cancelling: \(error)")
+            }
+            finishCancelled()
+        case .transcribing:
+            guard cancellationRequested == false else { return }
+            AppLogger.log("cancelDictation: cancelling transcription in progress")
+            cancellationRequested = true
+            transcriptionTask?.cancel()
+            (transcriptionEngine as? StreamingTranscriptionEngine)?.cancelStreaming()
+        case .idle, .inserting, .error:
+            return
+        }
+    }
+
+    private func finishCancelled() {
+        cancellationRequested = false
+        appState.update(for: .idle)
+        appState.statusText = "Cancelled"
+        appState.setVoiceOverlayStatus(.cancelled)
+        appState.setDebugMessage("Dictation cancelled; nothing inserted and the clipboard was left untouched")
+        AppLogger.log("cancelDictation: session cancelled")
     }
 
     private func startRecordingTimeout() {
@@ -288,16 +337,31 @@ final class DictationCoordinator {
             let recognitionLanguage = appState.selectedRecognitionLanguage
             let chineseScriptPreference = appState.selectedChineseScriptPreference
             appState.setDebugMessage("Transcribing (\(recognitionLanguage.statusDescription))")
-            let transcript: TranscriptResult
-            if let streamingEngine = activeStreamingEngine {
-                activeStreamingEngine = nil
-                transcript = try await streamingEngine.finishStreaming()
-            } else {
-                transcript = try await transcriptionEngine.transcribe(
+            let streamingEngine = activeStreamingEngine
+            activeStreamingEngine = nil
+            let transcriptionEngine = self.transcriptionEngine
+            let task = Task { () throws -> TranscriptResult in
+                if let streamingEngine {
+                    return try await streamingEngine.finishStreaming()
+                }
+                return try await transcriptionEngine.transcribe(
                     clip,
                     language: recognitionLanguage,
                     chineseScriptPreference: chineseScriptPreference
                 )
+            }
+            transcriptionTask = task
+            defer { transcriptionTask = nil }
+            let transcript: TranscriptResult
+            do {
+                transcript = try await task.value
+            } catch where cancellationRequested {
+                finishCancelled()
+                return
+            }
+            if cancellationRequested {
+                finishCancelled()
+                return
             }
             guard transcript.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
                 finishWithoutInserting(

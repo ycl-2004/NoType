@@ -29,6 +29,103 @@ struct DictationCoordinatorTests {
     }
 
     @Test
+    func cancelWhileRecordingDeletesTheAudioAndNeverTranscribes() async throws {
+        let appState = makeTestAppState()
+        let recorder = TempFileAudioRecorder()
+        let engine = CallCountingTranscriptionEngine(result: .init(text: "should not appear"))
+        let clipboard = StubClipboardStore()
+        try clipboard.setText("previous")
+        let inserter = RecordingFocusedTextInserter()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: recorder,
+            transcriptionEngine: engine,
+            focusedTextInserter: inserter,
+            fallbackTextInserter: StubFallbackInserter(),
+            clipboardStore: clipboard
+        )
+
+        await coordinator.toggleDictation()
+        #expect(appState.dictationState == .recording)
+        await coordinator.cancelDictation()
+
+        #expect(appState.dictationState == .idle)
+        #expect(appState.voiceOverlayStatus == .cancelled)
+        #expect(engine.transcribeCallCount == 0)
+        #expect(inserter.insertedText == nil)
+        #expect(clipboard.text == "previous")
+        let clipURL = try #require(recorder.lastClipURL)
+        #expect(FileManager.default.fileExists(atPath: clipURL.path) == false)
+
+        // The next press starts a fresh session.
+        await coordinator.toggleDictation()
+        #expect(appState.dictationState == .recording)
+    }
+
+    @Test(arguments: [true, false])
+    func cancelWhileTranscribingDiscardsTheResult(engineHonorsCancellation: Bool) async throws {
+        let appState = makeTestAppState()
+        let engine = SlowTranscriptionEngine(
+            result: .init(text: "should not appear"),
+            duration: engineHonorsCancellation ? .seconds(30) : .milliseconds(300),
+            honorsCancellation: engineHonorsCancellation
+        )
+        let clipboard = StubClipboardStore()
+        try clipboard.setText("previous")
+        let inserter = RecordingFocusedTextInserter()
+        let fallback = StubFallbackInserter()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: TempFileAudioRecorder(),
+            transcriptionEngine: engine,
+            focusedTextInserter: inserter,
+            fallbackTextInserter: fallback,
+            clipboardStore: clipboard
+        )
+
+        await coordinator.toggleDictation()
+        let stop = Task { await coordinator.toggleDictation() }
+        await engine.waitUntilTranscribing()
+        #expect(appState.dictationState == .transcribing)
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        await coordinator.cancelDictation()
+        await stop.value
+
+        #expect(clock.now - started < .seconds(5))
+        #expect(appState.dictationState == .idle)
+        #expect(appState.voiceOverlayStatus == .cancelled)
+        #expect(appState.lastError == nil)
+        #expect(inserter.insertedText == nil)
+        #expect(fallback.pastedText == nil)
+        #expect(clipboard.text == "previous")
+    }
+
+    @Test
+    func cancelOutsideASessionDoesNothing() async {
+        let appState = makeTestAppState()
+        let coordinator = DictationCoordinator(
+            appState: appState,
+            microphonePermissionManager: StubMicrophonePermissionManager(state: .authorized),
+            accessibilityPermissionManager: StubAccessibilityPermissionManager(trusted: true),
+            audioRecorder: StubAudioRecorder(),
+            transcriptionEngine: StubTranscriptionEngine(result: .init(text: "Hello")),
+            focusedTextInserter: StubFocusedTextInserter(),
+            fallbackTextInserter: StubFallbackInserter()
+        )
+
+        await coordinator.cancelDictation()
+
+        #expect(appState.dictationState == .idle)
+        #expect(appState.voiceOverlayStatus == .hidden)
+    }
+
+    @Test
     func toggleFromIdleStartsRecording() async {
         let appState = makeTestAppState()
         let coordinator = DictationCoordinator(
@@ -812,6 +909,45 @@ private final class TempFileAudioRecorder: AudioRecording, @unchecked Sendable {
         try Data("fake audio".utf8).write(to: url)
         lastClipURL = url
         return RecordedAudioClip(fileURL: url)
+    }
+}
+
+/// Stands in for a decode that is still running when the user presses Escape.
+@MainActor
+private final class SlowTranscriptionEngine: TranscriptionEngine {
+    let result: TranscriptResult
+    private let duration: Duration
+    private let honorsCancellation: Bool
+    private var started = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(result: TranscriptResult, duration: Duration, honorsCancellation: Bool) {
+        self.result = result
+        self.duration = duration
+        self.honorsCancellation = honorsCancellation
+    }
+
+    func waitUntilTranscribing() async {
+        if started { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func transcribe(
+        _ clip: RecordedAudioClip,
+        language: DictationRecognitionLanguage,
+        chineseScriptPreference: ChineseScriptPreference
+    ) async throws -> TranscriptResult {
+        started = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+        if honorsCancellation {
+            try await Task.sleep(for: duration)
+        } else {
+            // Finishes its work regardless, like a decode that never checks for cancellation.
+            let end = ContinuousClock.now + duration
+            while ContinuousClock.now < end { try? await Task.sleep(for: .milliseconds(20)) }
+        }
+        return result
     }
 }
 
