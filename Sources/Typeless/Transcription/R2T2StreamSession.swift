@@ -18,30 +18,32 @@ enum R2T2SegmentDecoder {
     }
 
     static func transcribe(
-        _ samples: [Float], runtime: any R2T2Runtime, language: DictationRecognitionLanguage
+        _ samples: [Float], runtime: any R2T2Runtime, language: DictationRecognitionLanguage,
+        hotwords: String
     ) async throws -> String {
         var parts: [String] = []
         for range in ranges(for: samples) {
-            parts.append(try await decode(Array(samples[range]), runtime: runtime, language: language))
+            parts.append(try await decode(Array(samples[range]), runtime: runtime, language: language, hotwords: hotwords))
         }
         return join(parts)
     }
 
     private static func decode(
-        _ samples: [Float], runtime: any R2T2Runtime, language: DictationRecognitionLanguage
+        _ samples: [Float], runtime: any R2T2Runtime, language: DictationRecognitionLanguage,
+        hotwords: String
     ) async throws -> String {
         try Task.checkCancellation()
         do {
             return R2T2TranscriptionEngine.normalizeRawText(
-                try await runtime.transcribe(samples: samples, language: language)
+                try await runtime.transcribe(samples: samples, language: language, hotwords: hotwords)
             )
         } catch R2T2DecodeError.limitReached {
             guard samples.count > R2T2Paths.sampleRate else {
                 throw TranscriptionError.failed("R2T2 reached its decoding limit. No incomplete text was inserted. Please retry a shorter recording.")
             }
             let middle = samples.count / 2
-            let left = try await decode(Array(samples[..<middle]), runtime: runtime, language: language)
-            let right = try await decode(Array(samples[middle...]), runtime: runtime, language: language)
+            let left = try await decode(Array(samples[..<middle]), runtime: runtime, language: language, hotwords: hotwords)
+            let right = try await decode(Array(samples[middle...]), runtime: runtime, language: language, hotwords: hotwords)
             return join([left, right])
         }
     }
@@ -90,6 +92,7 @@ final class R2T2AudioStream: Sendable {
 actor R2T2StreamSession {
     let language: DictationRecognitionLanguage
     let chineseScriptPreference: ChineseScriptPreference
+    let hotwords: String
     private let runtime: any R2T2Runtime
     private let previewsEnabled: Bool
     private let onPreview: @Sendable (String) -> Void
@@ -108,12 +111,14 @@ actor R2T2StreamSession {
         runtime: any R2T2Runtime,
         language: DictationRecognitionLanguage,
         chineseScriptPreference: ChineseScriptPreference,
+        hotwords: String = "",
         previewsEnabled: Bool = true,
         onPreview: @escaping @Sendable (String) -> Void = { _ in }
     ) {
         self.runtime = runtime
         self.language = language
         self.chineseScriptPreference = chineseScriptPreference
+        self.hotwords = hotwords
         self.previewsEnabled = previewsEnabled
         self.onPreview = onPreview
     }
@@ -146,7 +151,7 @@ actor R2T2StreamSession {
         if let cachedPreview, cachedPreview.count == samples.count {
             tail = cachedPreview.text
         } else {
-            tail = try await R2T2SegmentDecoder.transcribe(samples, runtime: runtime, language: language)
+            tail = try await R2T2SegmentDecoder.transcribe(samples, runtime: runtime, language: language, hotwords: hotwords)
         }
         guard !isCancelled else { throw CancellationError() }
         return R2T2SegmentDecoder.join(completed + [tail])
@@ -180,9 +185,9 @@ actor R2T2StreamSession {
         }
         let snapshot = Array(samples.prefix(count))
         processing = (count, commitsSegment)
-        processingTask = Task { [runtime, language] in
+        processingTask = Task { [runtime, language, hotwords] in
             do {
-                let text = try await R2T2SegmentDecoder.transcribe(snapshot, runtime: runtime, language: language)
+                let text = try await R2T2SegmentDecoder.transcribe(snapshot, runtime: runtime, language: language, hotwords: hotwords)
                 self.decoded(text, count: count, commitsSegment: commitsSegment)
             } catch {
                 self.processingTask = nil

@@ -2,10 +2,31 @@ import Foundation
 @preconcurrency import llama
 
 protocol R2T2Runtime: Sendable {
+    /// `hotwords` is free text (usually a term list) the model treats as recognition context.
     func transcribe(
         samples: [Float],
-        language: DictationRecognitionLanguage
+        language: DictationRecognitionLanguage,
+        hotwords: String
     ) async throws -> String
+}
+
+/// The prompt R2T2 was trained on: the Qwen3-ASR chat template, which carries context such as
+/// hotwords in the system turn, puts only audio in the user turn, and forces a language by
+/// pre-filling `language X<asr_text>` in the assistant turn. The template does not render user-turn
+/// text, so an instruction there is text the model never saw in training.
+/// https://huggingface.co/netease-youdao/Confucius4-R2T2 (chat_template.json)
+enum R2T2Prompt {
+    static func text(language: DictationRecognitionLanguage, hotwords: String) -> String {
+        let system = hotwords.trimmingCharacters(in: .whitespacesAndNewlines)
+        let forcedLanguage = switch language {
+        case .mixed: ""
+        case .chinese: "language Chinese<asr_text>"
+        case .english: "language English<asr_text>"
+        }
+        return "<|im_start|>system\n\(system)<|im_end|>\n" +
+            "<|im_start|>user\n<__media__><|im_end|>\n" +
+            "<|im_start|>assistant\n\(forcedLanguage)"
+    }
 }
 
 /// The R2T2 local engine.
@@ -30,6 +51,7 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
     private var loadingTask: Task<any R2T2Runtime, Error>?
     private var activeSession: R2T2AudioStream?
     private let appState: AppState
+    private let hotwordStore: HotwordStore
 
     var canStream: Bool { true }
 
@@ -38,9 +60,11 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
         modelInstaller: R2T2ModelInstalling = R2T2ModelInstaller(),
         makeRuntime: @escaping @Sendable (URL, URL) throws -> any R2T2Runtime = {
             try R2T2LlamaRuntime(modelURL: $0, projectorURL: $1)
-        }
+        },
+        hotwordStore: HotwordStore = .standard
     ) {
         self.appState = appState
+        self.hotwordStore = hotwordStore
         self.modelInstaller = modelInstaller
         self.makeRuntime = makeRuntime
     }
@@ -56,7 +80,9 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
             return TranscriptResult(text: "", rawText: "")
         }
 
-        let rawText = try await R2T2SegmentDecoder.transcribe(samples, runtime: runtime, language: language)
+        let rawText = try await R2T2SegmentDecoder.transcribe(
+            samples, runtime: runtime, language: language, hotwords: currentHotwords()
+        )
         return Self.makeTranscriptResult(
             rawText,
             language: language,
@@ -78,6 +104,7 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
             runtime: runtime,
             language: language,
             chineseScriptPreference: chineseScriptPreference,
+            hotwords: currentHotwords(),
             previewsEnabled: appState.showsVoiceOverlay && appState.showsLiveTranscript,
             onPreview: { [weak self] text in
                 Task { @MainActor [weak self] in
@@ -179,6 +206,15 @@ final class R2T2TranscriptionEngine: StreamingTranscriptionEngine, LocalModelRea
                 "Could not load audio for R2T2: \(error.localizedDescription)"
             )
         }
+    }
+
+    /// Read per dictation, so edits to the hotword file apply without a restart.
+    private func currentHotwords() -> String {
+        let context = hotwordStore.promptContext()
+        if context.isEmpty == false {
+            AppLogger.log("R2T2: using \(context.split(separator: "\n").count - 1) hotwords")
+        }
+        return context
     }
 
     private func liveTranscriptDidChange(_ text: String) {
@@ -303,14 +339,16 @@ private final class R2T2LlamaRuntime: R2T2Runtime, @unchecked Sendable {
 
     func transcribe(
         samples: [Float],
-        language: DictationRecognitionLanguage
+        language: DictationRecognitionLanguage,
+        hotwords: String
     ) async throws -> String {
-        try transcribeSynchronously(samples: samples, language: language)
+        try transcribeSynchronously(samples: samples, language: language, hotwords: hotwords)
     }
 
     private func transcribeSynchronously(
         samples: [Float],
-        language: DictationRecognitionLanguage
+        language: DictationRecognitionLanguage,
+        hotwords: String
     ) throws -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -319,15 +357,7 @@ private final class R2T2LlamaRuntime: R2T2Runtime, @unchecked Sendable {
         llama_memory_clear(llama_get_memory(context), true)
         llama_sampler_reset(sampler)
 
-        let instruction: String = switch language {
-        case .mixed:
-            "Transcribe audio to text."
-        case .english:
-            "Transcribe the audio into English text."
-        case .chinese:
-            "Transcribe the audio into Chinese text."
-        }
-        let prompt = "<|im_start|>user\n<__media__>\(instruction)<|im_end|>\n<|im_start|>assistant\n"
+        let prompt = R2T2Prompt.text(language: language, hotwords: hotwords)
 
         let bitmap = samples.withUnsafeBufferPointer { buffer in
             mtmd_bitmap_init_from_audio(buffer.count, buffer.baseAddress)

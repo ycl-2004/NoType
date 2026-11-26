@@ -94,10 +94,22 @@ struct R2T2StreamTests {
     }
 
     @Test
+    func everyDecodeInASessionCarriesItsHotwords() async throws {
+        let runtime = HotwordRecordingRuntime()
+        let session = R2T2StreamSession(runtime: runtime, language: .mixed,
+                                       chineseScriptPreference: .followModel, hotwords: "热词：\nGhostty")
+        await session.append([Float](repeating: 0.1, count: 16_000))
+        _ = try await session.finish()
+        let seen = await runtime.hotwords
+        #expect(seen.isEmpty == false)
+        #expect(seen.allSatisfy { $0 == "热词：\nGhostty" })
+    }
+
+    @Test
     func decoderRetriesLimitsWithoutLosingEitherHalf() async throws {
         let runtime = SampleRecordingRuntime(limit: 16_000)
         let samples = (0..<32_000).map { Float($0) }
-        let text = try await R2T2SegmentDecoder.transcribe(samples, runtime: runtime, language: .english)
+        let text = try await R2T2SegmentDecoder.transcribe(samples, runtime: runtime, language: .english, hotwords: "")
         #expect(text == "16000 16000")
         let seen = await runtime.seen
         #expect(seen.filter { $0.count <= 16_000 }.flatMap { $0 } == samples)
@@ -108,7 +120,7 @@ struct R2T2StreamTests {
         let runtime = SampleRecordingRuntime(limit: 0)
         await #expect(throws: TranscriptionError.self) {
             try await R2T2SegmentDecoder.transcribe([Float](repeating: 0.1, count: 16_000),
-                                                  runtime: runtime, language: .mixed)
+                                                  runtime: runtime, language: .mixed, hotwords: "")
         }
     }
 
@@ -128,7 +140,7 @@ private actor SampleRecordingRuntime: R2T2Runtime {
     private(set) var seen: [[Float]] = []
     let limit: Int?
     init(limit: Int? = nil) { self.limit = limit }
-    func transcribe(samples: [Float], language: DictationRecognitionLanguage) async throws -> String {
+    func transcribe(samples: [Float], language: DictationRecognitionLanguage, hotwords: String) async throws -> String {
         seen.append(samples)
         if let limit, samples.count > limit { throw R2T2DecodeError.limitReached }
         return String(samples.count)
@@ -143,7 +155,7 @@ private actor SlowFirstDecodeRuntime: R2T2Runtime {
     private let firstDecodeStarted = StreamTestSignal()
     init(firstDecode: Duration) { self.firstDecode = firstDecode }
     func waitForFirstDecode() async { await firstDecodeStarted.wait() }
-    func transcribe(samples: [Float], language: DictationRecognitionLanguage) async throws -> String {
+    func transcribe(samples: [Float], language: DictationRecognitionLanguage, hotwords: String) async throws -> String {
         calls += 1
         if calls == 1 {
             await firstDecodeStarted.signal()
@@ -156,6 +168,14 @@ private actor SlowFirstDecodeRuntime: R2T2Runtime {
     }
 }
 
+private actor HotwordRecordingRuntime: R2T2Runtime {
+    private(set) var hotwords: [String] = []
+    func transcribe(samples: [Float], language: DictationRecognitionLanguage, hotwords: String) async throws -> String {
+        self.hotwords.append(hotwords)
+        return String(samples.count)
+    }
+}
+
 private actor StreamTestSignal {
     private var fired = false
     private var waiter: CheckedContinuation<Void, Never>?
@@ -163,5 +183,19 @@ private actor StreamTestSignal {
     func wait() async {
         if fired { return }
         await withCheckedContinuation { waiter = $0 }
+    }
+}
+
+struct R2T2PromptTests {
+    @Test
+    func hotwordsGoInTheSystemTurnAndTheUserTurnHoldsOnlyAudio() {
+        let prompt = R2T2Prompt.text(language: .mixed, hotwords: "  Ghostty, Claude Code \n")
+        #expect(prompt == "<|im_start|>system\nGhostty, Claude Code<|im_end|>\n<|im_start|>user\n<__media__><|im_end|>\n<|im_start|>assistant\n")
+    }
+
+    @Test
+    func aForcedLanguageIsPrefilledInTheAssistantTurn() {
+        #expect(R2T2Prompt.text(language: .chinese, hotwords: "").hasSuffix("<|im_start|>assistant\nlanguage Chinese<asr_text>"))
+        #expect(R2T2Prompt.text(language: .english, hotwords: "").hasSuffix("<|im_start|>assistant\nlanguage English<asr_text>"))
     }
 }

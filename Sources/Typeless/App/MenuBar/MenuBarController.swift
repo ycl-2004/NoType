@@ -8,6 +8,7 @@ final class MenuBarController: NSObject {
     private let accessibilityPermissionManager: AccessibilityPermissionManaging
     private let permissionSettingsOpener: PermissionSettingsOpening
     private let localModelManager: LocalModelRemoving
+    private let hotwordStore: HotwordStore
     private let statusItem: NSStatusItem
 
     init(
@@ -16,7 +17,8 @@ final class MenuBarController: NSObject {
         microphonePermissionManager: MicrophonePermissionManaging = MicrophonePermissionManager(),
         accessibilityPermissionManager: AccessibilityPermissionManaging = AccessibilityPermissionManager(),
         permissionSettingsOpener: PermissionSettingsOpening = SystemSettingsOpener(),
-        localModelManager: LocalModelRemoving = LocalModelManager()
+        localModelManager: LocalModelRemoving = LocalModelManager(),
+        hotwordStore: HotwordStore = .standard
     ) {
         self.appState = appState
         self.coordinator = coordinator
@@ -24,6 +26,7 @@ final class MenuBarController: NSObject {
         self.accessibilityPermissionManager = accessibilityPermissionManager
         self.permissionSettingsOpener = permissionSettingsOpener
         self.localModelManager = localModelManager
+        self.hotwordStore = hotwordStore
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         appState.onChange = { [weak self] in
@@ -213,6 +216,16 @@ final class MenuBarController: NSObject {
         menu.addItem(NSMenuItem(title: note, action: nil, keyEquivalent: ""))
 
         menu.addItem(.separator())
+        let hotwordCount = hotwordStore.terms().count
+        let hotwordsItem = NSMenuItem(
+            title: hotwordCount == 0 ? "Edit Hotwords…" : "Edit Hotwords… (\(hotwordCount))",
+            action: #selector(handleEditHotwords),
+            keyEquivalent: ""
+        )
+        hotwordsItem.target = self
+        hotwordsItem.toolTip = "R2T2 hint list, one term per line: \(hotwordStore.fileURL.path)"
+        menu.addItem(hotwordsItem)
+
         let manageModelsItem = NSMenuItem(title: "Manage Downloaded Models", action: nil, keyEquivalent: "")
         manageModelsItem.submenu = downloadedModelMenu()
         menu.addItem(manageModelsItem)
@@ -721,6 +734,17 @@ final class MenuBarController: NSObject {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    @objc
+    private func handleEditHotwords() {
+        do {
+            try hotwordStore.createFileIfMissing()
+            NSWorkspace.shared.open(hotwordStore.fileURL)
+            appState.setDebugMessage("Opened the hotword list")
+        } catch {
+            appState.setDebugMessage("Could not open the hotword list: \(error.localizedDescription)")
+        }
     }
 
     @objc
