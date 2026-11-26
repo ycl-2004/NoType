@@ -66,8 +66,32 @@ Names and technical terms are often misheard (「千问」, "LLM", "HTML" in rea
 NoType passes none. NoType also writes its instruction ("Transcribe audio to text.") into the user
 turn, which R2T2's chat template does not render, so the model was never trained with text there.
 
+**A higher-precision model is not the fix (measured 2026-11-26).** Five passages read aloud by the
+user (8–23 s, Voice Memos, converted to 16 kHz mono), decoded offline through NoType's segment
+decoder and post-processor, best of two runs:
+
+| Model | CER (388 chars, punctuation ignored) | Decode time, all 5 |
+| --- | --- | --- |
+| Q4_K_M (in use) | 4.4% (17) | 6.44 s |
+| Q8_0 | 3.9% (15) | 7.83 s |
+
+The two-character gap is noise (Q8 gained on one clip and inserted a word in another), Q8 is about
+20% slower and needs about 0.7 GB more memory, so NoType stays on Q4_K_M. Both models made the same
+errors, and they are vocabulary errors: Ghostty → ghosty, Claude Code → cloudcall / cloudcode,
+parser → parse, NoType → no type, 远场 → 原厂.
+
+Reference texts, kept so the same recordings can judge a vocabulary change:
+
+1. 今天下午三点我们要跟产品团队开会，主要讨论下个月的上线计划，还有用户反馈里提到的几个问题。
+2. 我刚刚在 Ghostty 里面用 Claude Code 跑了一下测试，有两个 test 失败了，都是 HTML 解析的问题，你帮我看一下是不是 parser 的 bug。
+3. 操作系统这一章主要讲 DMA、中断和虚拟内存，DMA 的作用是让外设直接访问内存，不需要 CPU 一个字节一个字节地搬数据。
+4. Can you check whether the API returns a 404 when the token expires, and if so, add a retry with exponential backoff.
+5. 我想把 NoType 的识别模型从 Q4 换成 Q8 试试看，因为社区有人测过，Q8 在远场的准确率比 Q4 高不少，而且速度差不多。不过 Q8 的文件大概一点八 GB，内存会多占零点七 GB 左右，所以我想先用几段固定的录音做对比，看看错字率到底差多少，再决定要不要换。如果差别不大，我们就继续用 Q4，省一点内存。
+
+The recordings are the user's and are not in the repository.
+
 **Direction.** Move the instruction out of the user turn and add a user vocabulary as system-turn
-context, then compare against real recordings before keeping either change.
+context, then compare against real recordings, such as the five above, before keeping either change.
 
 ### 6. No LLM post-processing
 
@@ -77,6 +101,17 @@ segmentation, or spoken-to-written conversion.
 **Risk.** This is the largest possible quality gain and the largest change in the product's nature:
 a remote model breaks the "everything runs locally" property that the README states, and a local
 model adds materially to latency and bundle size. Not a change to make casually.
+
+**Apple's on-device model is not good enough (tested 2026-11-26).** The Foundation Models system
+model is available on the development Mac and supports Simplified Chinese, so it costs no download
+and no NoType memory. On 7 real dictations (20–487 characters), greedy decoding, three prompts:
+a plain rule list removed a meaningful opening sentence and changed what 「把它去掉」 referred to; a
+"never change meaning" list kept content but left most 然后 and repeats in long dictations; adding
+three worked examples improved short inputs only. Every prompt turned 「做做看」 into 「做看」.
+Cleanup ran at roughly 60 characters per second (0.7 s for 20 characters, 8 s for 487), on top of
+the R2T2 stop latency. Dedicated dictation-cleanup models found at the same time (S1-mini,
+Superflow, Rillo, SpeakoFlow Mini) are English-only; Spokenly Cleanup 1 lists Chinese at lower
+quality. Cleanup is not being pursued until a Chinese-capable option is cheap in memory and latency.
 
 ---
 
