@@ -6,16 +6,42 @@ All notable user-facing changes to NoType are recorded here.
 
 ### Added
 
-- Added **R2T2 Streaming (Experimental)** using the Confucius4-R2T2 Q4_K_M GGUF model with the
-  Q8_0 audio projector through llama.cpp and Metal. Audio is transcribed into an internal
-  buffer while recording; it is never live-inserted into the focused field.
-  Stopping finalizes the buffer through the existing Insert + Copy, Insert Only, or Copy Only
-  pipeline. The optional overlay can show the stable preview without affecting text delivery.
-- Added a strict shared Hugging Face model-store guard. Qwen3-ASR, SenseVoice, and R2T2 downloads
-  validate their configured, staging, and resolved filesystem paths before storing model files.
+- Added **R2T2 Streaming** using the Confucius4-R2T2 Q4_K_M GGUF model with the Q8_0 audio
+  projector through llama.cpp and Metal. Audio is transcribed into an internal buffer while
+  recording; it is never live-inserted into the focused field. Stopping finalizes the buffer
+  through the existing Insert + Copy, Insert Only, or Copy Only pipeline. The optional overlay
+  can show the newest preview without affecting text delivery.
+- Added **Esc to cancel**. While recording or transcribing, a plain Esc press deletes the
+  recording and ends the session without inserting text or touching the clipboard. NoType consumes
+  that press, so it does not also interrupt the focused app (for example an agent running in a
+  terminal). Esc with Command, Option, Control or Shift passes through. The overlay shows `已取消`.
+- Added a strict shared Hugging Face model-store guard. R2T2 downloads validate their configured,
+  staging, and resolved filesystem paths before storing model files.
+
+### Changed
+
+- **R2T2 is now the only local engine and the default for new installs.** Auto, and every mode on
+  macOS 15, uses R2T2; with macOS Speech selected, Auto dictation now streams through R2T2. The
+  engine menu lists R2T2 Streaming and macOS Speech (fast) with no experimental section. See
+  [ADR-012](docs/decisions/012-r2t2-only-local-engine.md).
+
+- The voice overlay no longer shows a `输入中…` label next to the recording waveform. Recording
+  shows the waveform alone, or the waveform and the newest live text; the capsule sizes itself to
+  its content and long live text is cut at the start so the latest words stay visible.
+
+### Removed
+
+- Removed the **Qwen3-ASR 0.6B INT8** and **SenseVoice Small** engines and the sherpa-onnx
+  dependency. A saved Qwen3-ASR, SenseVoice, or Whisper preference now loads as R2T2. Model folders
+  those engines downloaded under `~/Documents/huggingface/models/k2-fsa/` are left in place and can
+  be deleted by hand.
 
 ### Fixed
 
+- Fixed punctuation where long recordings are split into segments. A segment's closing `。` now
+  becomes `，` at the cut, no space is left after full-width punctuation, and removing a filler no
+  longer leaves `，。`. All three defects appeared in a real 86-second dictation.
+- The live transcript preview now keeps the newest 240 characters instead of the first 240.
 - R2T2 now commits bounded audio segments, backs off tail previews, and reuses completed work.
   Stop drains the ordered audio queue; token/context limits trigger smaller retries instead of
   silently truncating output. Full-sequence detokenization preserves split UTF-8 characters.
@@ -23,6 +49,13 @@ All notable user-facing changes to NoType are recorded here.
   the clipboard. Temporary-file cleanup, the five-minute limit, and changed-target fallback remain.
 - R2T2 model downloads are pinned to a revision and checked against publisher size/SHA-256
   metadata. Switching to another engine releases the previous cached model.
+- R2T2 no longer re-hashes its 1.46 GB model files on every launch. The SHA-256 check runs when a
+  file is downloaded or its on-disk identity changes; launch preparation previously spent about
+  35 seconds in "Preparing" before dictation could start.
+- Quitting NoType while R2T2 is loaded no longer crashes. The model is freed before exit, where
+  llama.cpp's Metal teardown aborted if a model was still resident.
+- Stopping an R2T2 dictation no longer waits for a live preview that cannot cover the final audio;
+  that preview is cancelled so the final decode starts immediately.
 - Debug logs are capped at 2 MiB and scanned hourly rather than on every event. SwiftPM and
   XCTest runs use separate diagnostic logs.
 - Added `scripts/clean_development.sh` to remove generated builds and old ZIPs while preserving

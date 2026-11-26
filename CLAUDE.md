@@ -16,43 +16,49 @@ swift test           # 全量测试，约 1 秒
 
 ## 技术栈与结构
 
-三个转写引擎，`RoutingTranscriptionEngine` 按次路由：
+两个转写引擎，`RoutingTranscriptionEngine` 按次路由：
 
-- **macOS Speech**（`SpeechTranscriber`，需 macOS 26）：快约 10 倍，但**一个实例只能绑一个
-  locale，无法检测语言**（SDK 硬限制，见 ADR-004）。
-- **Qwen3-ASR 0.6B INT8**（sherpa-onnx + ONNX）：多语种本地模型，自己检测语言，一次解码。
-- **SenseVoice Small**（sherpa-onnx + ONNX，支持中文、粤语、英语、日语、韩语）。
-- **`Auto (中英混说)` 使用所选的本地模型**；只有选择 macOS Speech 时才为混合语言回退到
-  Qwen3-ASR。
+- **R2T2 Streaming**（默认，唯一的本地模型。Confucius4-R2T2 Q4_K_M GGUF + Q8_0 投影器，
+  llama.cpp + Metal）：有道在 Qwen3-ASR-1.7B 上训练的流式模型。边录边转，文字只进内部
+  缓冲，松手后走同一个插入流程；录音超过 24 秒按停顿切段。见 ADR-010、ADR-011、ADR-012。
+- **macOS Speech**（`SpeechTranscriber`，需 macOS 26）：单语言更快、不用下载，但**一个实例
+  只能绑一个 locale，无法检测语言**（SDK 硬限制，见 ADR-004）。
+- **`Auto (中英混说)` 和 macOS 15 上的所有模式都走 R2T2**，且照样流式。Qwen3-ASR 和
+  SenseVoice 已删除，旧偏好值读成 R2T2（ADR-012）。
 
 ```
 Sources/Typeless/
   Coordinator/    听写状态机
-  Transcription/  三个引擎 + 路由 + 模型安装 + 后处理
-  Audio/          AVAudioRecorder，16kHz 单声道 WAV
+  Transcription/  两个引擎 + 路由 + 模型安装 + 分段拼接 + 后处理
+  Audio/          AVAudioRecorder / AVAudioEngine（流式），16kHz 单声道 WAV
   Accessibility/  插入文本，失败退回剪贴板
-  Hotkey/         全局快捷键与双击修饰键
+  Hotkey/         全局快捷键、双击修饰键；录音和转写期间 Esc 取消（CGEventTap）
 ```
 
 ## 约定
 
-- **模型不进仓库，也不进 app bundle。** Qwen3-ASR 和 SenseVoice 各自首次使用时下载到
-  `~/Documents/huggingface/models/k2-fsa/` 下一个固定目录。放在 bundle 外是为了让替换 app
-  不会移动模型路径。见 ADR-008、ADR-006。
-- **删除模型只删除 NoType 自己下载的那两个目录。** 菜单里的模型管理不会调用 macOS Speech
+- **模型不进仓库，也不进 app bundle。** R2T2 首次使用时下载到
+  `~/Documents/huggingface/models/mradermacher/Confucius4-R2T2-GGUF/`（Hugging Face 固定
+  revision，校验发布方 SHA-256）。放在 bundle 外是为了让替换 app 不会移动模型路径。
+- **删除模型只删除 NoType 自己下载的 R2T2 目录。** 菜单里的模型管理不会调用 macOS Speech
   的系统资产 API，也不会碰 app bundle 或同目录下其他 Hugging Face 模型。
 - 覆盖 `/Applications` 前必须用开发证书签名，否则 designated requirement 变化，
-  麦克风/辅助功能/语音识别权限全部重置。
+  麦克风/辅助功能/语音识别权限全部重置。本机用 YC 自己账号的证书「Apple Development …
+  (5AGX9CFNPL)」，团队 BQYHJCCRMP：
+  `CODESIGN_IDENTITY=68E2393709CD7141C4791351A029F486D4E7E60E ./scripts/build_app.sh`，
+  然后退出 NoType、用 `dist/NoType.app` 替换 `/Applications/NoType.app` 再打开。
 - 改动前先读 `docs/known-issues.md`——里面记着已知缺陷和**明确决定不修的理由**，
   别把有意为之的行为当 bug 修掉。
 - 决策写成 ADR 放 `docs/decisions/`，用户可见的变更写 `CHANGELOG.md`。
 
 ## 当前状态
 
-已发布 0.4.0。当前发布包含三引擎路由、本地模型就绪状态、用户自定义快捷键，以及
-**用 Qwen3-ASR 0.6B INT8 替换 Whisper**（ADR-008）——WhisperKit 依赖和 `Vendor/` 目录
-已删除，release 不再打包模型。
+已发布 0.4.0（本地引擎还是 Qwen3-ASR 和 SenseVoice）。`/Applications` 里装的是当前未发布
+代码的开发证书签名版（2026-11-26 安装）。未发布的改动见 `CHANGELOG.md` 的
+Unreleased：R2T2 成为唯一本地引擎、Esc 取消、浮窗简化、分段标点修复、R2T2 启动校验按
+文件身份缓存。
 
-**Qwen3-ASR 的实际转写质量和延迟还没在设备上测过**，这是这条分支收尾前最该做的事。
-之后最有价值的是**流式转写**：目前是批处理，全部解码时间都落在用户松手之后，等待随
-说话时长线性增长；竞品边说边解码所以等待恒定。见 known-issues #7。
+日常使用的引擎是 R2T2：2026-11-26 一次 86 秒听写，松手后约 1 秒插入（日志秒级精度）。
+
+R2T2 的模型卡说明热词和上下文要放在 system 段；`R2T2LlamaRuntime` 目前把指令写在 user
+段，而 R2T2 的聊天模板不渲染 user 段文字。做词表或改提示词时先用真实录音对比。

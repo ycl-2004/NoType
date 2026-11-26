@@ -21,7 +21,8 @@ over the clip and drops everything after the last frame with speech in it, keepi
 of padding and only acting when at least 1.0s would be removed. Verified on a 34.3s recording
 ending in 6s of silence: 5.50s trimmed, 28.8s transcribed, same transcript, and the clip stayed
 inside one 30s window instead of spilling into a second. The 30s-window argument was Whisper's;
-under Qwen3-ASR the saving is simply the decode time the silent tail would have cost.
+under R2T2 the saving is simply the decode time the silent tail would have cost. Only R2T2's
+non-streaming path trims: a streamed dictation, the normal case, decodes its silent tail.
 
 Three deliberate limits remain:
 
@@ -58,6 +59,16 @@ behaviours needs to be thought through rather than flipped.
 **Direction.** Treat a transcript that is *entirely* a known hallucination as "no speech detected"
 and report it as such, instead of inserting the phrase.
 
+### 5. No custom vocabulary
+
+Names and technical terms are often misheard (「千问」, "LLM", "HTML" in real dictations on
+2026-11-26). The R2T2 model card documents context and hotword hints, passed as system-turn text;
+NoType passes none. NoType also writes its instruction ("Transcribe audio to text.") into the user
+turn, which R2T2's chat template does not render, so the model was never trained with text there.
+
+**Direction.** Move the instruction out of the user turn and add a user vocabulary as system-turn
+context, then compare against real recordings before keeping either change.
+
 ### 6. No LLM post-processing
 
 Output is cleaned by regular expressions only. There is no punctuation repair, sentence
@@ -71,19 +82,19 @@ model adds materially to latency and bundle size. Not a change to make casually.
 
 ## Open: session behaviour
 
-### 7. No history and no cancel
+### 7. No history
 
 - Only `lastTranscriptPreview` survives, truncated to 120 characters. A transcript that is inserted
   into the wrong place or overwritten cannot be recovered.
 - In-progress feedback is available through the optional bottom-center voice overlay, with
   a waveform driven by microphone levels, processing status, and configurable result duration.
-  Experimental R2T2 can also show its stable in-progress transcript there, but there is still no
-  elapsed-time display.
-- Recording can only be stopped-and-transcribed. There is no way to abandon a session.
+  R2T2 can also show its newest in-progress text there, but there is no elapsed-time display.
+- A session can be abandoned with Esc while recording or transcribing. R2T2 stops at its next
+  cancellation check. Whether macOS Speech stops early has not been checked; if it finishes its
+  decode, the result is discarded, and the next dictation can start once that decode returns.
 
-**Direction.** These are independent features rather than defects. Cancellation is the cheapest and
-probably the most useful of the remaining two. R2T2's first streaming implementation deliberately
-keeps live text out of the focused field; all engines still finalize through the same output pipeline.
+**Direction.** History is an independent feature rather than a defect. R2T2 deliberately keeps live
+text out of the focused field; all engines still finalize through the same output pipeline.
 
 ---
 
@@ -91,7 +102,7 @@ keeps live text out of the focused field; all engines still finalize through the
 
 `RoutingTranscriptionEngine.prewarm()` warms the engine the *current* settings resolve to. With
 `Engine: macOS Speech` and a single-language recognition mode selected at launch, that is the Apple
-engine — but `Auto (中英混说)` overrides the preference and always routes to Qwen3-ASR, so switching
+engine — but `Auto (中英混说)` overrides the preference and always routes to R2T2, so switching
 to `Auto` after launch meets a cold model.
 
 Observed on 2026-09-08 with exactly that configuration, on the Whisper engine this issue was first
@@ -109,13 +120,24 @@ The lazy load is deliberate — the comment on `prewarm()` says a user who stays
 should never pay for a large local model — but it did not anticipate "prefers macOS Speech *and*
 uses Auto", which is a normal combination rather than an edge case.
 
-**Worse under Qwen3-ASR, and not yet measured.** The cold path is no longer a two-second model load:
-if no model is installed it is a roughly 1 GB download. What that costs on the first `Auto`
-dictation needs measuring on the device before this is prioritised.
+**Not yet measured under R2T2.** The cold path is a model load of unmeasured length, or a roughly
+1.5 GB download if the model is not installed. What that costs on the first `Auto` dictation needs
+measuring on the device before this is prioritised.
 
 **Direction.** Warm the local model in the background as well whenever it is reachable from `Auto`,
 accepting a second model resident in memory. Alternatively warm it lazily on the first switch to
 `Auto` rather than on the first dictation after it.
+
+---
+
+### 12. Segment cuts cost some punctuation
+
+Recordings over 24 seconds are decoded as independent segments (`AudioChunker`), so a segment
+cannot see the text that follows it. In an 86s dictation on 2026-11-26 all three cuts landed
+mid-sentence and each produced a full stop plus a stray space. `TranscriptSegmentJoiner` now turns a
+closing `。` at a cut into `，` and removes the space; a real sentence end at a cut becomes a comma.
+The 24s limit was measured on Qwen3-ASR 0.6B (ADR-008) and has not been measured on R2T2; a longer
+limit would mean fewer cuts.
 
 ---
 
@@ -149,13 +171,11 @@ Listed only so the open items above are not read as the complete picture.
 ## Closed by the Qwen3-ASR engine swap
 
 Replacing WhisperKit with the sherpa-onnx Qwen3-ASR 0.6B INT8 offline model deleted the code these
-entries described. They are listed by their original numbers so the gaps above are not read as
-missing entries.
+entries described; Qwen3-ASR was later removed in turn (ADR-012). Open items 5 and 12 above keep
+their original numbers.
 
 | Issue | Why it is gone |
 | --- | --- |
 | 1. Decoder prompt written but never reaches the model | Qwen3-ASR takes one decode per clip. `DecodingOptions`, `promptTokens`, and the prompt text are all removed. |
 | 3. Repetition detection only sees adjacent single tokens | `repeatedFragmentPenalty`, `selectBestTranscript`, and `canStopAfterAttempt` scored between multiple Whisper attempts. There is now one attempt. |
-| 5. No custom vocabulary | Still true as a *feature* gap, but the hardcoded scoring list it described (`analyzeTranscript`) is gone. sherpa-onnx exposes a `hotwords` field on the Qwen3-ASR config, currently passed as empty — that is where this would now be built. |
 | 8. `swift test --filter` breaks the build | Caused by the vendored `Vendor/WhisperKit-main/` checkout being pulled into the build graph. That directory is deleted; `swift test --filter` was verified working on 2026-09-09. |
-| 12. Chunked decoding costs some punctuation | **Still open, and it applies again.** Listed here in error: chunking was removed with WhisperKit, then restored as `AudioChunker` on 2026-09-09 because Qwen3-ASR cannot decode past ~30s at all. Chunks are still decoded independently, so the punctuation cost the original entry measured is still paid on recordings over 24s. See [ADR-008](decisions/008-qwen3-asr-replaces-whisper.md). |
