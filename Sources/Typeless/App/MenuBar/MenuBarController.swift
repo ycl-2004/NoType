@@ -191,7 +191,7 @@ final class MenuBarController: NSObject {
     func transcriptionEngineMenu() -> NSMenu {
         let menu = NSMenu()
 
-        for engine in TranscriptionEngineChoice.allCases where engine != .r2t2 {
+        for engine in TranscriptionEngineChoice.allCases {
             let item = NSMenuItem(
                 title: engine.menuTitle,
                 action: #selector(handleTranscriptionEngineSelection(_:)),
@@ -206,24 +206,9 @@ final class MenuBarController: NSObject {
         }
 
         menu.addItem(.separator())
-        let experimentalLabel = NSMenuItem(title: "Experimental", action: nil, keyEquivalent: "")
-        experimentalLabel.isEnabled = false
-        menu.addItem(experimentalLabel)
-
-        let r2t2Item = NSMenuItem(
-            title: TranscriptionEngineChoice.r2t2.menuTitle,
-            action: #selector(handleTranscriptionEngineSelection(_:)),
-            keyEquivalent: ""
-        )
-        r2t2Item.target = self
-        r2t2Item.representedObject = TranscriptionEngineChoice.r2t2.rawValue
-        r2t2Item.state = appState.selectedTranscriptionEngine == .r2t2 ? .on : .off
-        menu.addItem(r2t2Item)
-
-        menu.addItem(.separator())
 
         let note = TranscriptionEngineChoice.isAppleSpeechAvailable
-            ? "Auto uses a multilingual local model"
+            ? "Auto (中英混说) always uses R2T2"
             : "Needs macOS 26 for macOS Speech"
         menu.addItem(NSMenuItem(title: note, action: nil, keyEquivalent: ""))
 

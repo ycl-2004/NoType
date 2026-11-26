@@ -8,7 +8,7 @@ protocol R2T2Runtime: Sendable {
     ) async throws -> String
 }
 
-/// Experimental R2T2 engine.
+/// The R2T2 local engine.
 ///
 /// llama.cpp currently gives NoType the Q4_K_M text model plus the Q8_0 audio projector, but does
 /// not expose the R2T2/vLLM streaming-state API. While that native state API is pending, the engine

@@ -153,7 +153,7 @@ final class AppleSpeechTranscriptionEngine: TranscriptionEngine, LocalModelReadi
 
     // MARK: - Locale selection
 
-    /// Qwen3-ASR detects the spoken language on its own; this engine cannot — a transcriber is
+    /// R2T2 detects the spoken language on its own; this engine cannot — a transcriber is
     /// built for exactly one locale. `.mixed` therefore resolves to the user's own preferred language
     /// rather than to a detector, and the chosen locale still transcribes foreign words it hears.
     nonisolated static func resolveLocale(

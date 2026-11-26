@@ -2,19 +2,13 @@ import Foundation
 
 /// Which speech engine the user wants NoType to transcribe with.
 ///
-/// The engines make different trade-offs, so none is strictly better:
-///
-/// - `appleSpeech` is far faster and never translates or invents subtitle sign-offs, but a
-///   transcriber is built for exactly one language. It cannot detect what is being spoken.
-/// - `qwen3ASR` detects the spoken language on its own through the official sherpa-onnx
-///   Qwen3-ASR 0.6B INT8 offline model.
-/// - `senseVoice` detects the spoken language for Chinese, Cantonese, English, Japanese, and
-///   Korean through a shared local ONNX model.
+/// - `r2t2` is the local model: Confucius4-R2T2 through llama.cpp and Metal. It detects the spoken
+///   language itself, handles mixed Chinese and English, and transcribes while the user speaks.
+/// - `appleSpeech` is faster for single-language dictation, but a transcriber is built for exactly
+///   one language. It cannot detect what is being spoken.
 enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
-    case appleSpeech
-    case qwen3ASR
-    case senseVoice
     case r2t2
+    case appleSpeech
 
     /// macOS 26 is where `SpeechAnalyzer` first ships. Below it there is nothing to choose between.
     static var isAppleSpeechAvailable: Bool {
@@ -22,46 +16,47 @@ enum TranscriptionEngineChoice: String, CaseIterable, Equatable {
         return false
     }
 
-    static var defaultChoice: TranscriptionEngineChoice {
-        isAppleSpeechAvailable ? .appleSpeech : .qwen3ASR
+    /// R2T2 handles every recognition mode, so it is the engine a new install starts with.
+    static let defaultChoice: TranscriptionEngineChoice = .r2t2
+
+    /// Reads a saved preference. Every removed engine (Whisper, Qwen3-ASR, SenseVoice) was a
+    /// multilingual local model, and R2T2 is the local model that replaced them.
+    static func savedChoice(rawValue: String) -> TranscriptionEngineChoice? {
+        switch rawValue {
+        case "bundledWhisper", "qwen3ASR", "senseVoice":
+            .r2t2
+        default:
+            TranscriptionEngineChoice(rawValue: rawValue)
+        }
     }
 
     var menuTitle: String {
         switch self {
+        case .r2t2:
+            "R2T2 Streaming"
         case .appleSpeech:
             "macOS Speech (fast)"
-        case .qwen3ASR:
-            "Qwen3-ASR 0.6B INT8"
-        case .senseVoice:
-            "SenseVoice Small"
-        case .r2t2:
-            "R2T2 Streaming (Experimental)"
         }
     }
 
     var statusDescription: String {
         switch self {
-        case .appleSpeech:
-            "macOS on-device speech"
-        case .qwen3ASR:
-            "Qwen3-ASR 0.6B INT8 model"
-        case .senseVoice:
-            "SenseVoice Small model"
         case .r2t2:
             "Confucius4-R2T2 Q4_K_M streaming model"
+        case .appleSpeech:
+            "macOS on-device speech"
         }
     }
 
-    /// `Auto` asks the selected local model to work out the language. macOS Speech is the one
-    /// exception: its recognizer is bound to one locale, so mixed speech uses Qwen3-ASR for the
-    /// multilingual local-model behavior.
+    /// macOS Speech is bound to one locale, so `Auto` — and every mode on a Mac without macOS
+    /// Speech — uses R2T2.
     func resolvedEngine(for language: DictationRecognitionLanguage) -> TranscriptionEngineChoice {
         guard self == .appleSpeech else { return self }
-        guard Self.isAppleSpeechAvailable else { return .qwen3ASR }
+        guard Self.isAppleSpeechAvailable else { return .r2t2 }
 
         switch language {
         case .mixed:
-            return .qwen3ASR
+            return .r2t2
         case .chinese, .english:
             return .appleSpeech
         }

@@ -19,34 +19,6 @@ struct TranscriptionEngineTests {
     }
 
     @Test
-    func qwen3ASRUsesTheOfficialOfflineInt8Configuration() {
-        #expect(Qwen3ASRTranscriptionEngine.sampleRate == 16_000)
-        #expect(Qwen3ASRTranscriptionEngine.featureDimension == 80)
-        #expect(Qwen3ASRTranscriptionEngine.executionProvider == "cpu")
-        // Above the official default of 512, which measured correct for a 31s clip but leaves no
-        // headroom for a denser one. `AudioChunker` keeps every decode well inside this budget, so
-        // raising it is margin rather than an attempt to decode a long recording in one pass —
-        // that does not work at any setting. See ADR-008.
-        #expect(Qwen3ASRTranscriptionEngine.maxTotalLength == 1024)
-        #expect(Qwen3ASRTranscriptionEngine.maxNewTokens == 512)
-        #expect(
-            Qwen3ASRTranscriptionEngine.maxTotalLength > Qwen3ASRTranscriptionEngine.maxNewTokens,
-            "Output tokens share the total budget with the audio, so a maxNewTokens at or above maxTotalLength is a ceiling that can never be reached."
-        )
-    }
-
-    @Test
-    func qwen3ASRModelPathsMatchTheOfficialArchiveLayout() {
-        #expect(Qwen3ASRPaths.modelPackageName == "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25")
-        #expect(Qwen3ASRPaths.archiveFileName == "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2")
-        #expect(Qwen3ASRPaths.convFrontendURL.lastPathComponent == "conv_frontend.onnx")
-        #expect(Qwen3ASRPaths.encoderURL.lastPathComponent == "encoder.int8.onnx")
-        #expect(Qwen3ASRPaths.decoderURL.lastPathComponent == "decoder.int8.onnx")
-        #expect(Qwen3ASRPaths.tokenizerURL.lastPathComponent == "tokenizer")
-        #expect(Qwen3ASRPaths.modelFolder.path.contains("/models/k2-fsa/"))
-    }
-
-    @Test
     func audioEnergyVADDetectsSpeechFrames() {
         let vad = AudioEnergyVAD()
         let silence = [Float](repeating: 0, count: vad.frameLengthSamples)

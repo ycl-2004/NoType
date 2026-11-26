@@ -2,8 +2,10 @@ import Foundation
 
 /// Splits a long recording into segments an utterance-level recognizer can actually decode.
 ///
-/// Qwen3-ASR is reliable up to roughly 30s and fails badly past it. Measured on 2026-09-09 against
-/// the model's own sample files, at every `max_total_len` from 512 to 4096:
+/// The limit comes from Qwen3-ASR 0.6B, the smaller model of the family R2T2 is trained from, which
+/// is reliable up to roughly 30s and fails badly past it. R2T2 has not been measured separately.
+/// Measured on 2026-09-09 against the model's own sample files, at every `max_total_len` from 512
+/// to 4096:
 ///
 /// | Audio | Expected | Best observed |
 /// | --- | --- | --- |
@@ -11,7 +13,7 @@ import Foundation
 /// | 63s | 628 chars | 220 chars — 65% missing |
 /// | 191s | 2672 chars | 83 chars, or the single token `language` |
 ///
-/// Raising `max_total_len` does not fix it and introduces a second failure: a 124s clip at 4096
+/// Raising `max_total_len` did not fix it and introduced a second failure: a 124s clip at 4096
 /// ran away to 6693 characters over 428 seconds. Splitting is the fix — every segment stays inside
 /// the range where the model is known to be correct, and short recordings keep the single-decode
 /// path that measured fastest.

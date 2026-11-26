@@ -90,6 +90,13 @@ if [[ -n "$ICON_SOURCE" ]]; then
     "$ASSET_CATALOG_DIR"
 fi
 
+# A bundle whose executable cannot find llama.framework aborts at launch; fail the build instead.
+if [[ -d "$MACOS_DIR/llama.framework" ]] && \
+   ! otool -l "$MACOS_DIR/$EXECUTABLE_NAME" | grep -q "path @executable_path "; then
+  echo "Executable has no @executable_path rpath, so llama.framework would not load." >&2
+  exit 1
+fi
+
 SIGNING_IDENTITY="${CODESIGN_IDENTITY:--}"
 find "$MACOS_DIR" -maxdepth 1 -type d -name '*.framework' \
   -exec codesign --force --deep --sign "$SIGNING_IDENTITY" {} \;

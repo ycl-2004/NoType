@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted — 2026-09-22. Scheduling and preview semantics superseded by [ADR-011](011-r2t2-resource-and-reliability.md).
+Accepted — 2026-09-22. Scheduling and preview semantics superseded by [ADR-011](011-r2t2-resource-and-reliability.md);
+the experimental label and the separate menu section removed by [ADR-012](012-r2t2-only-local-engine.md).
 
 ## Context
 

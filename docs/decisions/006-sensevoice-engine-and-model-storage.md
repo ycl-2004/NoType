@@ -1,8 +1,8 @@
 # ADR-006: Add SenseVoice as a Shared Optional Local Engine
 
-- Status: Accepted; the Whisper comparison it was written against is superseded by
-  [ADR-008](008-qwen3-asr-replaces-whisper.md), which replaced Whisper with Qwen3-ASR. SenseVoice
-  itself is unchanged, and the storage layout established here is what Qwen3-ASR now follows.
+- Status: Superseded by [ADR-012](012-r2t2-only-local-engine.md), which removed the SenseVoice
+  engine. The shared Hugging Face storage rule and the guarantee that model deletion never touches
+  macOS Speech still apply to R2T2.
 - Date: 2026-09-09
 
 ## Context

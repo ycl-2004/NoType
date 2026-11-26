@@ -1,10 +1,10 @@
 import Foundation
 
-/// Paths for the experimental Confucius4-R2T2 GGUF package.
+/// Paths for the Confucius4-R2T2 GGUF package.
 ///
 /// The model and its audio projector stay outside the app bundle so replacing NoType does not
-/// duplicate a roughly 1.6 GB download. The files are kept under the Hugging Face model folder
-/// rather than the sherpa-onnx folder because they come from a different runtime and publisher.
+/// duplicate a roughly 1.6 GB download. They live in the shared Hugging Face model folder under
+/// their publisher's name.
 enum R2T2Paths {
     static let modelRepository = "mradermacher/Confucius4-R2T2-GGUF"
     // Publisher LFS metadata: https://huggingface.co/api/models/mradermacher/Confucius4-R2T2-GGUF?blobs=true

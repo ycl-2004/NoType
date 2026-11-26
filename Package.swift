@@ -10,17 +10,19 @@ let package = Package(
     products: [
         .executable(name: "noType", targets: ["Typeless"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/k2-fsa/sherpa-onnx.git", exact: "1.13.7"),
-    ],
     targets: [
         .executableTarget(
             name: "Typeless",
             dependencies: [
-                .product(name: "sherpa-onnx", package: "sherpa-onnx"),
                 "LlamaFramework",
             ],
-            path: "Sources/Typeless"
+            path: "Sources/Typeless",
+            // llama.framework ships beside the executable, in .build and in the app bundle's
+            // Contents/MacOS. SwiftPM adds no rpath for a binary framework on its own; without
+            // this the app aborts at launch with "Library not loaded: @rpath/llama.framework".
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path"]),
+            ]
         ),
         .binaryTarget(
             name: "LlamaFramework",

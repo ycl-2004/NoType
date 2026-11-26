@@ -5,12 +5,12 @@ import Testing
 @MainActor
 struct TranscriptionEngineRoutingTests {
     /// The rule that matters most: Auto asks for language detection, which macOS Speech cannot do.
-    /// Honouring the preference there would force one language onto a mixed clip — Qwen3-ASR is
-    /// the local multilingual fallback.
+    /// Honouring the preference there would force one language onto a mixed clip — R2T2 is the
+    /// local multilingual fallback.
     @Test
-    func autoAlwaysUsesQwen3ASREvenWhenMacOSSpeechIsPreferred() {
-        #expect(TranscriptionEngineChoice.appleSpeech.resolvedEngine(for: .mixed) == .qwen3ASR)
-        #expect(TranscriptionEngineChoice.qwen3ASR.resolvedEngine(for: .mixed) == .qwen3ASR)
+    func autoAlwaysUsesR2T2EvenWhenMacOSSpeechIsPreferred() {
+        #expect(TranscriptionEngineChoice.appleSpeech.resolvedEngine(for: .mixed) == .r2t2)
+        #expect(TranscriptionEngineChoice.r2t2.resolvedEngine(for: .mixed) == .r2t2)
     }
 
     @Test
@@ -22,32 +22,46 @@ struct TranscriptionEngineRoutingTests {
     }
 
     @Test
-    func choosingQwen3ASRKeepsEveryModeOnQwen3ASR() {
+    func choosingR2T2KeepsEveryModeOnR2T2() {
         for language in DictationRecognitionLanguage.allCases {
-            #expect(TranscriptionEngineChoice.qwen3ASR.resolvedEngine(for: language) == .qwen3ASR)
+            #expect(TranscriptionEngineChoice.r2t2.resolvedEngine(for: language) == .r2t2)
         }
     }
 
     @Test
-    func choosingSenseVoiceKeepsEveryModeOnSenseVoice() {
-        for language in DictationRecognitionLanguage.allCases {
-            #expect(TranscriptionEngineChoice.senseVoice.resolvedEngine(for: language) == .senseVoice)
-        }
+    func newInstallsStartOnR2T2() {
+        let appState = AppState(userDefaults: makeIsolatedDefaults())
+        #expect(appState.selectedTranscriptionEngine == .r2t2)
+    }
+
+    /// Whisper, Qwen3-ASR and SenseVoice were removed; a saved preference for any of them must
+    /// still load a working local engine.
+    @Test(arguments: ["bundledWhisper", "qwen3ASR", "senseVoice"])
+    func savedPreferenceForARemovedEngineLoadsR2T2(rawValue: String) {
+        let defaults = makeIsolatedDefaults()
+        defaults.set(rawValue, forKey: "transcriptionEngine")
+        #expect(AppState(userDefaults: defaults).selectedTranscriptionEngine == .r2t2)
     }
 
     @Test
-    func routingEnablesStreamingOnlyForTheExperimentalR2T2Engine() async throws {
+    func routingStreamsWheneverTheDictationReachesR2T2() async throws {
         let appState = AppState(userDefaults: makeIsolatedDefaults())
         let r2t2 = RoutingStreamingSpyEngine()
         let router = RoutingTranscriptionEngine(
             appState: appState,
-            makeAppleEngine: { nil },
+            makeAppleEngine: { RoutingSpyEngine(name: "apple") },
             makeR2T2Engine: { r2t2 }
         )
 
-        #expect(router.canStream == false)
-        appState.setTranscriptionEngine(.r2t2)
         #expect(router.canStream)
+        appState.setTranscriptionEngine(.appleSpeech)
+        appState.setRecognitionLanguage(.mixed)
+        #expect(router.canStream, "Auto falls back to R2T2, so it streams too")
+        if TranscriptionEngineChoice.isAppleSpeechAvailable {
+            appState.setRecognitionLanguage(.chinese)
+            #expect(router.canStream == false)
+        }
+        appState.setTranscriptionEngine(.r2t2)
 
         let sink = try await router.beginStreaming(
             language: .mixed,
@@ -62,74 +76,57 @@ struct TranscriptionEngineRoutingTests {
     }
 
     @Test
-    func routerSendsSenseVoiceDictationToSenseVoice() async throws {
-        let appState = AppState(userDefaults: makeIsolatedDefaults())
-        appState.setTranscriptionEngine(.senseVoice)
-        let senseVoice = RoutingSpyEngine(name: "senseVoice")
-        let router = RoutingTranscriptionEngine(
-            appState: appState,
-            makeAppleEngine: { nil },
-            makeQwen3ASREngine: { RoutingSpyEngine(name: "qwen3ASR") },
-            makeSenseVoiceEngine: { senseVoice }
-        )
-
-        _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
-
-        #expect(senseVoice.transcribeCount == 1)
-    }
-
-    @Test
     func routerSendsSingleLanguageDictationToMacOSSpeech() async throws {
         guard TranscriptionEngineChoice.isAppleSpeechAvailable else { return }
         let appState = AppState(userDefaults: makeIsolatedDefaults())
         appState.setTranscriptionEngine(.appleSpeech)
         let apple = RoutingSpyEngine(name: "apple")
-        let qwen3ASR = RoutingSpyEngine(name: "qwen3ASR")
+        let r2t2 = RoutingSpyEngine(name: "r2t2")
         let router = RoutingTranscriptionEngine(
             appState: appState,
             makeAppleEngine: { apple },
-            makeQwen3ASREngine: { qwen3ASR }
+            makeR2T2Engine: { r2t2 }
         )
 
         _ = try await router.transcribe(makeClip(), language: .chinese, chineseScriptPreference: .simplified)
 
         #expect(apple.transcribeCount == 1)
-        #expect(qwen3ASR.transcribeCount == 0)
+        #expect(r2t2.transcribeCount == 0)
     }
 
     @Test
-    func routerSendsAutoDictationToQwen3ASRDespiteTheMacOSSpeechPreference() async throws {
+    func routerSendsAutoDictationToR2T2DespiteTheMacOSSpeechPreference() async throws {
         let appState = AppState(userDefaults: makeIsolatedDefaults())
         appState.setTranscriptionEngine(.appleSpeech)
         let apple = RoutingSpyEngine(name: "apple")
-        let qwen3ASR = RoutingSpyEngine(name: "qwen3ASR")
+        let r2t2 = RoutingSpyEngine(name: "r2t2")
         let router = RoutingTranscriptionEngine(
             appState: appState,
             makeAppleEngine: { apple },
-            makeQwen3ASREngine: { qwen3ASR }
+            makeR2T2Engine: { r2t2 }
         )
 
         _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
 
-        #expect(qwen3ASR.transcribeCount == 1)
+        #expect(r2t2.transcribeCount == 1)
         #expect(apple.transcribeCount == 0)
     }
 
-    /// The bundled model costs seconds and gigabytes to load. A user who stays on macOS Speech must
+    /// The local model costs seconds and gigabytes to load. A user who stays on macOS Speech must
     /// never pay for it, which is the entire reason the fast path is worth shipping.
     @Test
-    func qwen3ASRIsNeverBuiltWhileTheUserStaysOnMacOSSpeech() async throws {
+    func r2t2IsNeverBuiltWhileTheUserStaysOnMacOSSpeech() async throws {
         guard TranscriptionEngineChoice.isAppleSpeechAvailable else { return }
         let appState = AppState(userDefaults: makeIsolatedDefaults())
         appState.setTranscriptionEngine(.appleSpeech)
         appState.setRecognitionLanguage(.chinese)
-        var qwen3ASRBuildCount = 0
+        var r2t2BuildCount = 0
         let router = RoutingTranscriptionEngine(
             appState: appState,
             makeAppleEngine: { RoutingSpyEngine(name: "apple") },
-            makeQwen3ASREngine: {
-                qwen3ASRBuildCount += 1
-                return RoutingSpyEngine(name: "qwen3ASR")
+            makeR2T2Engine: {
+                r2t2BuildCount += 1
+                return RoutingSpyEngine(name: "r2t2")
             }
         )
 
@@ -137,29 +134,28 @@ struct TranscriptionEngineRoutingTests {
         _ = try await router.transcribe(makeClip(), language: .chinese, chineseScriptPreference: .simplified)
         _ = try await router.transcribe(makeClip(), language: .english, chineseScriptPreference: .followModel)
 
-        #expect(qwen3ASRBuildCount == 0)
+        #expect(r2t2BuildCount == 0)
     }
 
     /// Switching modes must reuse the engine that was already built rather than rebuilding it,
-    /// otherwise every Auto dictation would reload the bundled model.
+    /// otherwise every dictation would reload the local model.
     @Test
     func eachEngineIsBuiltOnceAndReused() async throws {
         let appState = AppState(userDefaults: makeIsolatedDefaults())
-        appState.setTranscriptionEngine(.qwen3ASR)
-        var qwen3ASRBuildCount = 0
+        var r2t2BuildCount = 0
         let router = RoutingTranscriptionEngine(
             appState: appState,
             makeAppleEngine: { nil },
-            makeQwen3ASREngine: {
-                qwen3ASRBuildCount += 1
-                return RoutingSpyEngine(name: "qwen3ASR")
+            makeR2T2Engine: {
+                r2t2BuildCount += 1
+                return RoutingSpyEngine(name: "r2t2")
             }
         )
 
         _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
         _ = try await router.transcribe(makeClip(), language: .chinese, chineseScriptPreference: .simplified)
 
-        #expect(qwen3ASRBuildCount == 1)
+        #expect(r2t2BuildCount == 1)
     }
 
     /// A settings file carried to an older Mac must not leave the app pointing at an engine that
@@ -172,42 +168,43 @@ struct TranscriptionEngineRoutingTests {
 
         let expected: TranscriptionEngineChoice = TranscriptionEngineChoice.isAppleSpeechAvailable
             ? .appleSpeech
-            : .qwen3ASR
+            : .r2t2
         #expect(appState.selectedTranscriptionEngine == expected)
     }
 
     @Test
     func engineChoicePersistsAcrossLaunches() {
+        guard TranscriptionEngineChoice.isAppleSpeechAvailable else { return }
         let defaults = makeIsolatedDefaults()
         let first = AppState(userDefaults: defaults)
-        first.setTranscriptionEngine(.qwen3ASR)
+        first.setTranscriptionEngine(.appleSpeech)
 
         let second = AppState(userDefaults: defaults)
-        #expect(second.selectedTranscriptionEngine == .qwen3ASR)
+        #expect(second.selectedTranscriptionEngine == .appleSpeech)
     }
 
     @Test
     func switchingEnginesReleasesThePreviousModelButKeepsCurrentModelHot() async throws {
+        guard TranscriptionEngineChoice.isAppleSpeechAvailable else { return }
         let appState = AppState(userDefaults: makeIsolatedDefaults())
         weak var oldEngine: RoutingSpyEngine?
         var builds = 0
         let router = RoutingTranscriptionEngine(
             appState: appState,
-            makeQwen3ASREngine: {
-                let engine = RoutingSpyEngine(name: "qwen")
+            makeAppleEngine: { RoutingSpyEngine(name: "apple") },
+            makeR2T2Engine: {
+                let engine = RoutingSpyEngine(name: "r2t2")
                 oldEngine = engine
                 builds += 1
                 return engine
-            },
-            makeSenseVoiceEngine: { RoutingSpyEngine(name: "sense") }
+            }
         )
-        appState.setTranscriptionEngine(.qwen3ASR)
         _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
         #expect(oldEngine != nil)
         _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
         #expect(builds == 1)
-        appState.setTranscriptionEngine(.senseVoice)
-        _ = try await router.transcribe(makeClip(), language: .mixed, chineseScriptPreference: .followModel)
+        appState.setTranscriptionEngine(.appleSpeech)
+        _ = try await router.transcribe(makeClip(), language: .chinese, chineseScriptPreference: .followModel)
         #expect(oldEngine == nil)
     }
 
@@ -297,20 +294,19 @@ struct TranscriptionEngineMenuTests {
     }
 
     @Test
-    func engineSubmenuListsAllEnginesAndMarksTheSelectedOne() {
+    func engineSubmenuListsR2T2FirstWithoutAnExperimentalSection() {
         let appState = makeMenuAppState()
-        appState.setTranscriptionEngine(.qwen3ASR)
         let controller = MenuBarController(appState: appState, coordinator: DictationCoordinator(appState: appState))
 
         let items = controller.transcriptionEngineMenu().items
         let titles = items.map(\.title)
 
+        #expect(titles.first == TranscriptionEngineChoice.r2t2.menuTitle)
         #expect(titles.contains(TranscriptionEngineChoice.appleSpeech.menuTitle))
-        #expect(titles.contains(TranscriptionEngineChoice.qwen3ASR.menuTitle))
-        #expect(titles.contains(TranscriptionEngineChoice.senseVoice.menuTitle))
-        #expect(items.first { $0.title == TranscriptionEngineChoice.qwen3ASR.menuTitle }?.state == .on)
+        #expect(titles.contains { $0.localizedCaseInsensitiveContains("experimental") } == false)
+        #expect(titles.contains { $0.contains("Qwen3") || $0.contains("SenseVoice") } == false)
+        #expect(items.first { $0.title == TranscriptionEngineChoice.r2t2.menuTitle }?.state == .on)
         #expect(items.first { $0.title == TranscriptionEngineChoice.appleSpeech.menuTitle }?.state == .off)
-        #expect(items.first { $0.title == TranscriptionEngineChoice.senseVoice.menuTitle }?.state == .off)
     }
 
     @Test
@@ -321,8 +317,7 @@ struct TranscriptionEngineMenuTests {
         let managementItem = menu.items.first { $0.title == "Manage Downloaded Models" }
         let titles = managementItem?.submenu?.items.map(\.title) ?? []
 
-        #expect(titles.contains { $0.contains("Qwen3-ASR") })
-        #expect(titles.contains { $0.contains("SenseVoice") })
+        #expect(titles.contains { $0.contains("R2T2") })
         #expect(titles.contains("Only NoType downloads are removed"))
         #expect(titles.contains { $0.contains("macOS Speech") } == false)
     }

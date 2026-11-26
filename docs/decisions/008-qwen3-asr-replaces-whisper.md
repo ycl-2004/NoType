@@ -4,7 +4,9 @@
 
 Accepted — supersedes [ADR-002](002-portable-release-packaging.md),
 [ADR-005](005-model-location-strategy.md), and the Whisper half of
-[ADR-006](006-sensevoice-engine-and-model-storage.md)
+[ADR-006](006-sensevoice-engine-and-model-storage.md). The Qwen3-ASR engine was removed by
+[ADR-012](012-r2t2-only-local-engine.md); the no-bundled-model rule and the chunking measurements
+that set the 24-second segment limit still apply.
 
 ## Date
 

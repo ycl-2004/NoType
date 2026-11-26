@@ -6,11 +6,7 @@ import Testing
 struct HuggingFaceModelStoreTests {
     @Test
     func everyDownloadRootIsInsideTheSharedHuggingFaceFolder() {
-        #expect(Qwen3ASRPaths.locationValidationError() == nil)
-        #expect(SenseVoicePaths.locationValidationError() == nil)
         #expect(R2T2Paths.locationValidationError() == nil)
-        #expect(Qwen3ASRPaths.sharedModelBaseFolder.path.hasPrefix(HuggingFaceModelStore.root.path + "/"))
-        #expect(SenseVoicePaths.sharedModelBaseFolder.path.hasPrefix(HuggingFaceModelStore.root.path + "/"))
         #expect(R2T2Paths.sharedModelBaseFolder.path.hasPrefix(HuggingFaceModelStore.root.path + "/"))
     }
 

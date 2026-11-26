@@ -2,30 +2,28 @@ import Foundation
 
 /// Sends each dictation to the engine that can actually handle it.
 ///
-/// The routing rule lives in `TranscriptionEngineChoice.resolvedEngine(for:)`: local model choices
-/// are honored for every recognition mode, while macOS Speech falls back to Qwen3-ASR for mixed
-/// speech because its recognizer is bound to one locale.
+/// The routing rule lives in `TranscriptionEngineChoice.resolvedEngine(for:)`: R2T2 is honored for
+/// every recognition mode, while macOS Speech falls back to R2T2 for mixed speech because its
+/// recognizer is bound to one locale.
 ///
-/// Each model-backed engine is built on first use rather than up front. A user who stays on macOS
-/// Speech never pays for loading either local model, which is the whole reason the fast path is
-/// worth having.
+/// Each engine is built on first use rather than up front. A user who stays on macOS Speech never
+/// pays for loading the local model, which is the whole reason the fast path is worth having.
 @MainActor
 final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModelReadinessReporting {
     var onModelReadinessChange: ((LocalModelReadiness) -> Void)?
 
     private let appState: AppState
     private let makeAppleEngine: () -> TranscriptionEngine?
-    private let makeQwen3ASREngine: () -> TranscriptionEngine
-    private let makeSenseVoiceEngine: () -> TranscriptionEngine
     private let makeR2T2Engine: () -> TranscriptionEngine
     private var appleEngine: TranscriptionEngine?
-    private var qwen3ASREngine: TranscriptionEngine?
-    private var senseVoiceEngine: TranscriptionEngine?
     private var r2t2Engine: TranscriptionEngine?
     private var activeStreamingEngine: StreamingTranscriptionEngine?
 
+    /// Streams whenever the dictation will reach R2T2, including `Auto` while macOS Speech is the
+    /// preference, so the fallback keeps the streaming stop latency too.
     var canStream: Bool {
-        appState.selectedTranscriptionEngine == .r2t2
+        appState.selectedTranscriptionEngine
+            .resolvedEngine(for: appState.selectedRecognitionLanguage) == .r2t2
     }
 
     init(
@@ -34,14 +32,10 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
             if #available(macOS 26.0, *) { return AppleSpeechTranscriptionEngine() }
             return nil
         },
-        makeQwen3ASREngine: @escaping () -> TranscriptionEngine = { Qwen3ASRTranscriptionEngine() },
-        makeSenseVoiceEngine: @escaping () -> TranscriptionEngine = { SenseVoiceTranscriptionEngine() },
         makeR2T2Engine: (() -> TranscriptionEngine)? = nil
     ) {
         self.appState = appState
         self.makeAppleEngine = makeAppleEngine
-        self.makeQwen3ASREngine = makeQwen3ASREngine
-        self.makeSenseVoiceEngine = makeSenseVoiceEngine
         self.makeR2T2Engine = makeR2T2Engine ?? { R2T2TranscriptionEngine(appState: appState) }
     }
 
@@ -63,8 +57,8 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
         )
     }
 
-    /// Warms only the engine the current settings would actually use. Warming both would load a
-    /// large local model for users who never reach it.
+    /// Warms only the engine the current settings would actually use. Warming both would load the
+    /// local model for users who never reach it.
     func prewarm() async {
         guard activeStreamingEngine == nil else { return }
         let choice = appState.selectedTranscriptionEngine.resolvedEngine(
@@ -109,35 +103,19 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
         // An in-flight stream retains its engine until finalization/cancellation.
         if activeStreamingEngine == nil {
             if choice != .appleSpeech { appleEngine = nil }
-            if choice != .qwen3ASR { qwen3ASREngine = nil }
-            if choice != .senseVoice { senseVoiceEngine = nil }
             if choice != .r2t2 { r2t2Engine = nil }
         }
         switch choice {
         case .appleSpeech:
             if let appleEngine { return appleEngine }
             guard let created = makeAppleEngine() else {
-                // Only reachable if the availability check and the factory disagree; Qwen3-ASR is
+                // Only reachable if the availability check and the factory disagree; R2T2 is
                 // always a working local answer, so fall through rather than fail the dictation.
-                AppLogger.log("Routing: macOS Speech unavailable, falling back to Qwen3-ASR")
-                return engine(for: .qwen3ASR)
+                AppLogger.log("Routing: macOS Speech unavailable, falling back to R2T2")
+                return engine(for: .r2t2)
             }
             bindReadiness(of: created)
             appleEngine = created
-            return created
-
-        case .qwen3ASR:
-            if let qwen3ASREngine { return qwen3ASREngine }
-            let created = makeQwen3ASREngine()
-            bindReadiness(of: created)
-            qwen3ASREngine = created
-            return created
-
-        case .senseVoice:
-            if let senseVoiceEngine { return senseVoiceEngine }
-            let created = makeSenseVoiceEngine()
-            bindReadiness(of: created)
-            senseVoiceEngine = created
             return created
 
         case .r2t2:
@@ -149,8 +127,8 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
         }
     }
 
-    /// Each local engine reports its own preparation lifecycle, and whichever ran most recently is
-    /// the one the Diagnostics menu should be describing.
+    /// An engine that loads a model reports its own preparation lifecycle, and whichever ran most
+    /// recently is the one the Diagnostics menu should be describing.
     private func bindReadiness(of engine: TranscriptionEngine) {
         guard let reporter = engine as? LocalModelReadinessReporting else { return }
         reporter.onModelReadinessChange = { [weak self] readiness in

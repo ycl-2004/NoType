@@ -1,6 +1,6 @@
 import Foundation
 
-/// Downloads the experimental R2T2 GGUF model and Q8 projector on first use.
+/// Downloads the R2T2 GGUF model and Q8 projector on first use.
 @MainActor
 protocol R2T2ModelInstalling {
     func installIfNeeded(progress: @escaping @MainActor (String) -> Void) async throws -> URL?
