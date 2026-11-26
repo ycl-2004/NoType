@@ -234,6 +234,29 @@ struct ChineseSpacingTests {
     }
 
     @Test
+    func spaceAfterFullWidthPunctuationIsRemoved() {
+        let cleaned = TranscriptPostProcessor.clean(
+            "回到这个app里面来使用。 或者是怎么样的， 用 GitHub 跑一遍。 GitHub 很好",
+            preferredLanguage: .mixed,
+            chineseScriptPreference: .followModel
+        )
+
+        #expect(cleaned == "回到这个app里面来使用。或者是怎么样的，用 GitHub 跑一遍。GitHub 很好")
+    }
+
+    @Test
+    func droppedFillerDoesNotLeaveDoublePunctuation() {
+        // Observed in a real dictation: "很多，然后。 只是" was inserted as "很多，。 只是".
+        let cleaned = TranscriptPostProcessor.clean(
+            "我其实用它用的很多，然后。 只是最近变慢了，，然后，我才想回来",
+            preferredLanguage: .mixed,
+            chineseScriptPreference: .followModel
+        )
+
+        #expect(cleaned == "我其实用它用的很多。只是最近变慢了，我才想回来")
+    }
+
+    @Test
     func spacesBetweenHanAndDigitsAreLeftAlone() {
         let cleaned = TranscriptPostProcessor.clean(
             "采样率是 16000 赫兹",

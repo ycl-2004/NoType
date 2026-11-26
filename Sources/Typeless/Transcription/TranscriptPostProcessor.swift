@@ -17,6 +17,7 @@ enum TranscriptPostProcessor {
         cleaned = removeTrailingHallucinatedClosers(from: cleaned)
         cleaned = collapseWhitespace(in: cleaned)
         cleaned = normalizeChineseSpacing(in: cleaned)
+        cleaned = collapseRedundantChinesePunctuation(in: cleaned)
         cleaned = normalizeChineseScript(in: cleaned, preference: chineseScriptPreference)
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -97,6 +98,15 @@ enum TranscriptPostProcessor {
         }
     }
 
+    /// Dropping a filler between two marks ("很多，然后。") or joining two segments can leave a
+    /// comma beside a stronger mark. The comma adds nothing there, so the stronger mark is kept.
+    private static func collapseRedundantChinesePunctuation(in text: String) -> String {
+        text
+            .replacingOccurrences(of: #"[，、]+(?=[。！？；：])"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<=[。！？；：])[，、]+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"([，、])[，、]+"#, with: "$1", options: .regularExpression)
+    }
+
     private static func normalizeChineseScript(
         in text: String,
         preference: ChineseScriptPreference
@@ -113,13 +123,10 @@ enum TranscriptPostProcessor {
 
     private static func normalizeChineseSpacing(in text: String) -> String {
         var normalized = text
-        let noSpaceAround = ["，", "。", "！", "？", "：", "；", "、", ",", ".", "!", "?", ":", ";"]
-        for token in noSpaceAround {
-            normalized = normalized.replacingOccurrences(of: " \(token)", with: token)
-            normalized = normalized.replacingOccurrences(of: "\(token) ", with: "\(token) ")
-        }
-
         normalized = normalized.replacingOccurrences(of: #"\s+([，。！？：；、,.!?:;])"#, with: "$1", options: .regularExpression)
+        // Full-width punctuation already carries its own spacing, so a space after it was never
+        // spoken. Chunk joins used to leave one before the next clause ("使用。 或者是").
+        normalized = normalized.replacingOccurrences(of: #"(?<=[，。！？：；、])[ \t]+"#, with: "", options: .regularExpression)
         normalized = normalized.replacingOccurrences(of: #"([（\(\[]) "#, with: "$1", options: .regularExpression)
         normalized = normalized.replacingOccurrences(of: #" ([）\)\]])"#, with: "$1", options: .regularExpression)
 

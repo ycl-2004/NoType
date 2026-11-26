@@ -47,7 +47,7 @@ enum R2T2SegmentDecoder {
     }
 
     static func join(_ parts: [String]) -> String {
-        parts.filter { !$0.isEmpty }.joined(separator: " ")
+        TranscriptSegmentJoiner.join(parts)
     }
 }
 

@@ -199,7 +199,7 @@ final class Qwen3ASRTranscriptionEngine: TranscriptionEngine, LocalModelReadines
             }
         }
 
-        return Qwen3ASRDecodeOutput(text: texts.joined(separator: " "), language: language)
+        return Qwen3ASRDecodeOutput(text: TranscriptSegmentJoiner.join(texts), language: language)
     }
 
     private nonisolated static func makeRecognizer() throws -> Qwen3ASRRecognizerBox {
