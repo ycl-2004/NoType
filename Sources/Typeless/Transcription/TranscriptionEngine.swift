@@ -9,6 +9,10 @@ protocol TranscriptionEngine {
     /// Loads whatever the first transcription would otherwise have to load. Best effort: failures
     /// are absorbed here so the real attempt can surface them with proper error handling.
     func prewarm() async
+
+    /// Frees loaded models before the process exits. llama.cpp aborts in its exit-time Metal
+    /// teardown while a model is still loaded, so quitting with R2T2 resident crashed NoType.
+    func releaseResources()
 }
 
 @MainActor
@@ -36,4 +40,5 @@ protocol StreamingTranscriptionEngine: TranscriptionEngine {
 
 extension TranscriptionEngine {
     func prewarm() async {}
+    func releaseResources() {}
 }

@@ -208,6 +208,27 @@ struct TranscriptionEngineRoutingTests {
         #expect(oldEngine == nil)
     }
 
+    /// llama.cpp aborts during exit if a model is still loaded, so termination must drop it first.
+    @Test
+    func releasingResourcesDropsTheLoadedModel() async throws {
+        let appState = AppState(userDefaults: makeIsolatedDefaults())
+        weak var loaded: RoutingSpyEngine?
+        let router = RoutingTranscriptionEngine(
+            appState: appState,
+            makeAppleEngine: { nil },
+            makeR2T2Engine: {
+                let engine = RoutingSpyEngine(name: "r2t2")
+                loaded = engine
+                return engine
+            }
+        )
+        await router.prewarm()
+        #expect(loaded != nil)
+
+        router.releaseResources()
+        #expect(loaded == nil)
+    }
+
     private func makeClip() -> RecordedAudioClip {
         RecordedAudioClip(fileURL: URL(fileURLWithPath: "/tmp/routing-test.wav"), duration: 1)
     }

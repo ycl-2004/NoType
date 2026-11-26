@@ -100,6 +100,13 @@ final class DictationCoordinator {
         }
     }
 
+    /// Called when the app terminates, so the local model is freed before exit-time teardown.
+    func releaseTranscriptionResources() {
+        transcriptionTask?.cancel()
+        activeStreamingEngine = nil
+        transcriptionEngine.releaseResources()
+    }
+
     /// Loads the model in the background at launch so the first dictation does not pay for it.
     func prepareForFirstDictation() async {
         appState.setLocalModelReadiness(.preparing)

@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        coordinator?.releaseTranscriptionResources()
         escapeKeyInterceptor?.stop()
         voiceOverlayController?.close()
         dictationShortcutMonitor?.stop()

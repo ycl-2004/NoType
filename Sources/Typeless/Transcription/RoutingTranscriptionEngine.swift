@@ -68,6 +68,13 @@ final class RoutingTranscriptionEngine: StreamingTranscriptionEngine, LocalModel
         await engine(for: choice).prewarm()
     }
 
+    func releaseResources() {
+        activeStreamingEngine?.cancelStreaming()
+        activeStreamingEngine = nil
+        appleEngine = nil
+        r2t2Engine = nil
+    }
+
     func beginStreaming(
         language: DictationRecognitionLanguage,
         chineseScriptPreference: ChineseScriptPreference
