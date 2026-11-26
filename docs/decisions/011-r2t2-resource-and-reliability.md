@@ -29,8 +29,10 @@ fallback, temporary-audio cleanup, and five-minute recording limit.
 - Keep debug logs at most 2 MiB. Retain five days, pruning at first use, hourly, or when the size cap
   is approached; size pressure can evict younger entries. Tests use separate process-specific temp logs.
 - Pin R2T2 to Hugging Face revision `a5b8b2d84b7a429ba758ec3a67b89602540fb34a`.
-  Verify size and publisher SHA-256 before installing and before a cold runtime load, using 1 MiB
-  reads off the main actor. Corrupt/incomplete installed files fail with explicit removal/retry guidance.
+  Verify size and publisher SHA-256 before installing, using 1 MiB reads off the main actor. Before a
+  cold runtime load, hash again only when a file's identity (device, file number, size, modification
+  time) differs from the one last verified for that digest; the result is kept in user defaults.
+  Corrupt/incomplete installed files fail with explicit removal/retry guidance.
   Use unique staging directories so simultaneous downloads do not delete one another's staging files.
 
 | File | Bytes | SHA-256 |
@@ -43,7 +45,10 @@ Independent segments can lose punctuation or a word boundary at a hard cut with 
 uses the same conservative split policy as the other local engines; it avoids whole-clip truncation
 but is not a guarantee of transcription accuracy. The energy threshold remains heuristic.
 
-Model verification adds sequential disk reads to cold preparation, not each dictation. The selected
+Hashing both files at utility priority kept every launch in "Preparing" for about 35 s, so an
+unchanged file is trusted by identity. A re-download, partial write or replaced file changes that
+identity and is hashed; damage that leaves size, file number and modification time intact is not
+detected, and the check is not a defense against someone who can already write the user's files. The selected
 model stays loaded for responsiveness. Cache clearing between independent prompts is still required;
 removing it without matching audio embeddings and prompt positions would corrupt inference.
 

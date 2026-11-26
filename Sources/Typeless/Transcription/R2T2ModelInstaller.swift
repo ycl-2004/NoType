@@ -35,10 +35,12 @@ final class R2T2ModelInstaller: R2T2ModelInstalling {
         return try await task.value
     }
 
+    private nonisolated static let verifiedFiles = UserDefaultsVerifiedModelFileStore()
+
     private static func verifyInstalledFiles() async throws {
         try await Task.detached(priority: .utility) {
-            try R2T2Paths.modelIntegrity.verify(at: R2T2Paths.modelURL)
-            try R2T2Paths.projectorIntegrity.verify(at: R2T2Paths.projectorURL)
+            try R2T2Paths.modelIntegrity.verify(at: R2T2Paths.modelURL, rememberingIn: verifiedFiles)
+            try R2T2Paths.projectorIntegrity.verify(at: R2T2Paths.projectorURL, rememberingIn: verifiedFiles)
         }.value
     }
 
@@ -100,8 +102,10 @@ final class R2T2ModelInstaller: R2T2ModelInstalling {
             )
         }
 
+        // A fresh download has no remembered identity, so this always hashes. Remembering the
+        // result lets the first launch after installation skip a second full hash.
         try await Task.detached(priority: .utility) {
-            try integrity.verify(at: downloadedURL)
+            try integrity.verify(at: downloadedURL, rememberingIn: verifiedFiles)
         }.value
         do {
             try FileManager.default.moveItem(at: downloadedURL, to: destination)
