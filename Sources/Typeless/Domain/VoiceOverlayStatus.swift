@@ -7,7 +7,7 @@ enum VoiceOverlayStatus: CaseIterable, Equatable {
     var text: String {
         switch self {
         case .hidden: ""
-        case .recording: "输入中…"
+        case .recording: "录音中…"
         case .transcribing: "转写中…"
         case .inserting: "插入中…"
         case .copying: "复制中…"

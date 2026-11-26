@@ -171,7 +171,8 @@ final class AppState: ObservableObject {
 
     func setLiveTranscript(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        liveTranscriptPreview = trimmed.isEmpty ? nil : String(trimmed.prefix(240))
+        // Keep the newest words: the overlay shows the end of what is being said.
+        liveTranscriptPreview = trimmed.isEmpty ? nil : String(trimmed.suffix(240))
     }
 
     func setDebugMessage(_ message: String) {

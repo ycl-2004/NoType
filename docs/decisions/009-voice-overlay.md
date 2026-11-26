@@ -13,7 +13,11 @@ must appear immediately, with no appearance-delay control.
 
 ## Decision
 
-Use a 360 × 58 pt SwiftUI capsule hosted in an AppKit nonactivating NSPanel. Position it 20 pt
+Use a 36 pt high SwiftUI capsule that sizes itself to its content, up to 440 pt wide, hosted in a
+transparent AppKit nonactivating NSPanel that leaves a margin for the capsule's own shadow. While
+recording, the capsule shows only the waveform, or the waveform and the newest live text when that
+preference is on; a status label beside the waveform only repeated it. Long live text is cut at the
+start so the newest words stay visible. Position the capsule 20 pt
 above the starting screen's visible bottom edge, so a visible Dock is respected. Keep that screen
 for the session; recompute placement when display parameters change. The panel joins Spaces and
 full-screen apps, cannot become key or main, and passes mouse input through.

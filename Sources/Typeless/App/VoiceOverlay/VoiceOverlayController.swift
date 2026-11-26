@@ -36,7 +36,8 @@ final class VoiceOverlayController {
         panel.ignoresMouseEvents = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // The capsule draws its own shadow; a window shadow would outline the transparent margin.
+        panel.hasShadow = false
         panel.animationBehavior = .none
 
         appState.$voiceOverlayStatus.removeDuplicates().sink { [weak self] status in
@@ -108,10 +109,11 @@ final class VoiceOverlayController {
         panel.orderFrontRegardless()
     }
 
+    /// The capsule's bottom edge sits 20 pt above the visible frame, clear of a visible Dock.
     static func frame(in visibleFrame: NSRect) -> NSRect {
         NSRect(
             x: visibleFrame.midX - VoiceOverlayView.size.width / 2,
-            y: visibleFrame.minY + 20,
+            y: visibleFrame.minY + 20 - VoiceOverlayView.shadowMargin,
             width: VoiceOverlayView.size.width,
             height: VoiceOverlayView.size.height
         )

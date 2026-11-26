@@ -71,7 +71,7 @@ struct VoiceOverlayTests {
         let screen = NSRect(x: -1920, y: 90, width: 1920, height: 990)
         let frame = VoiceOverlayController.frame(in: screen)
         #expect(frame.midX == screen.midX)
-        #expect(frame.minY == screen.minY + 20)
+        #expect(frame.minY + VoiceOverlayView.shadowMargin == screen.minY + 20)
         #expect(screen.contains(frame))
     }
 
@@ -199,17 +199,24 @@ struct VoiceOverlayWindowTests {
         let controller = VoiceOverlayController(appState: state)
         defer { controller.close() }
         state.update(for: .recording)
-        state.setLiveTranscript("这是一段足够长的实时转录内容，用来确认 overlay 保持单行并持续向左滚动")
         for level in [0.25, 0.6, 0.95, 0.65, 0.35] { state.appendVoiceAudioLevel(level) }
-        for status in [VoiceOverlayStatus.recording, .transcribing, .inserted, .copied, .insertionFailed] {
-            state.setVoiceOverlayStatus(status)
+        func capture(_ name: String) async throws {
             try await Task.sleep(for: .milliseconds(250))
             let view = try #require(controller.panel.contentView)
             view.layoutSubtreeIfNeeded()
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
             let png = try #require(bitmap.representation(using: .png, properties: [:]))
-            try png.write(to: directory.appendingPathComponent("\(status).png"))
+            try png.write(to: directory.appendingPathComponent("\(name).png"))
+        }
+        try await capture("recording")
+        state.setLiveTranscript("我们现在先把这几个小问题改完，然后再看语义清洗要不要做，最后这一句应该完整显示在右边")
+        state.setVoiceOverlayStatus(.hidden)
+        state.setVoiceOverlayStatus(.recording)
+        try await capture("recordingWithLiveTranscript")
+        for status in [VoiceOverlayStatus.transcribing, .inserted, .copied, .cancelled, .insertionFailed] {
+            state.setVoiceOverlayStatus(status)
+            try await capture("\(status)")
         }
     }
 }
