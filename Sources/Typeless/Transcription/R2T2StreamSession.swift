@@ -98,6 +98,8 @@ actor R2T2StreamSession {
     private var cachedPreview: (count: Int, text: String)?
     private var lastPreviewCount = 0
     private var processingTask: Task<Void, Never>?
+    /// What the in-flight decode covers, so stop can tell whether its result is still useful.
+    private var processing: (count: Int, commitsSegment: Bool)?
     private var isFinishing = false
     private var isCancelled = false
     private var partialFailed = false
@@ -125,7 +127,15 @@ actor R2T2StreamSession {
     func finish() async throws -> String {
         guard !isCancelled else { throw CancellationError() }
         isFinishing = true
-        if let processingTask { await processingTask.value }
+        if let processingTask {
+            // Audio keeps arriving while a preview decodes, so a preview started before stop
+            // almost never covers the final sample count and would be decoded only to be thrown
+            // away. Cancel it so the final decode starts now. A segment commit is always kept.
+            if let processing, processing.commitsSegment == false, processing.count != samples.count {
+                processingTask.cancel()
+            }
+            await processingTask.value
+        }
         guard !isCancelled else { throw CancellationError() }
         defer {
             samples.removeAll(keepingCapacity: false)
@@ -169,12 +179,15 @@ actor R2T2StreamSession {
             lastPreviewCount = count
         }
         let snapshot = Array(samples.prefix(count))
+        processing = (count, commitsSegment)
         processingTask = Task { [runtime, language] in
             do {
                 let text = try await R2T2SegmentDecoder.transcribe(snapshot, runtime: runtime, language: language)
                 self.decoded(text, count: count, commitsSegment: commitsSegment)
             } catch {
                 self.processingTask = nil
+                self.processing = nil
+                if error is CancellationError, self.isFinishing || self.isCancelled { return }
                 self.partialFailed = true
                 if !self.isCancelled {
                     AppLogger.log("R2T2: preview failed; finalization will retry the pending audio: \(error)")
@@ -185,6 +198,7 @@ actor R2T2StreamSession {
 
     private func decoded(_ text: String, count: Int, commitsSegment: Bool) {
         processingTask = nil
+        processing = nil
         guard !isCancelled else { return }
         if commitsSegment {
             completed.append(text)

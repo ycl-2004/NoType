@@ -62,6 +62,38 @@ struct R2T2StreamTests {
     }
 
     @Test
+    func stopCancelsAPreviewThatCannotCoverTheFinalAudio() async throws {
+        let runtime = SlowFirstDecodeRuntime(firstDecode: .seconds(30))
+        let session = R2T2StreamSession(runtime: runtime, language: .mixed,
+                                       chineseScriptPreference: .followModel)
+        await session.append([Float](repeating: 0.1, count: 16_000))
+        await runtime.waitForFirstDecode()
+        // Speech continues while the preview decodes, so the preview can no longer be reused.
+        await session.append([Float](repeating: 0.1, count: 16_000))
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        let result = try await session.finish()
+        #expect(clock.now - started < .seconds(5))
+        #expect(result == "32000")
+        #expect(await runtime.cancelledFirstDecode)
+    }
+
+    @Test
+    func stopWaitsForAPreviewThatCoversTheFinalAudio() async throws {
+        let runtime = SlowFirstDecodeRuntime(firstDecode: .milliseconds(200))
+        let session = R2T2StreamSession(runtime: runtime, language: .mixed,
+                                       chineseScriptPreference: .followModel)
+        await session.append([Float](repeating: 0.1, count: 16_000))
+        await runtime.waitForFirstDecode()
+
+        let result = try await session.finish()
+        #expect(result == "16000")
+        #expect(await runtime.calls == 1)
+        #expect(await runtime.cancelledFirstDecode == false)
+    }
+
+    @Test
     func decoderRetriesLimitsWithoutLosingEitherHalf() async throws {
         let runtime = SampleRecordingRuntime(limit: 16_000)
         let samples = (0..<32_000).map { Float($0) }
@@ -99,6 +131,27 @@ private actor SampleRecordingRuntime: R2T2Runtime {
     func transcribe(samples: [Float], language: DictationRecognitionLanguage) async throws -> String {
         seen.append(samples)
         if let limit, samples.count > limit { throw R2T2DecodeError.limitReached }
+        return String(samples.count)
+    }
+}
+
+/// Holds the first decode open, like a preview still running when the user stops.
+private actor SlowFirstDecodeRuntime: R2T2Runtime {
+    private(set) var calls = 0
+    private(set) var cancelledFirstDecode = false
+    private let firstDecode: Duration
+    private let firstDecodeStarted = StreamTestSignal()
+    init(firstDecode: Duration) { self.firstDecode = firstDecode }
+    func waitForFirstDecode() async { await firstDecodeStarted.wait() }
+    func transcribe(samples: [Float], language: DictationRecognitionLanguage) async throws -> String {
+        calls += 1
+        if calls == 1 {
+            await firstDecodeStarted.signal()
+            do { try await Task.sleep(for: firstDecode) } catch {
+                cancelledFirstDecode = true
+                throw error
+            }
+        }
         return String(samples.count)
     }
 }
